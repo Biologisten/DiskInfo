@@ -267,3 +267,4 @@ bool Theme::hasOwnBackground() const
     QStringList files = d.entryList(QStringList{"*Background-*.png"}, QDir::Files | QDir::NoDotAndDotDot);
     return !files.isEmpty();
 }
+QString buildThemeStyleSheet(const ThemeColors &c) { return QString("QWidget#centralwidget { color: %1; }").arg(c.labelText.name()) + " QLineEdit { ... }"; }
