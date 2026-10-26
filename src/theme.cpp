@@ -71,21 +71,24 @@ Theme Theme::parse(const QString &directory)
 
     QString currentSection = "";
     QStringList lines = text.split('\n');
-    for (QString line : lines) {
-        line = line.trimmed();
+    for (QString rawLine : lines) {
+        QString line = rawLine.trimmed();
         if (line.isEmpty()) continue;
-        // Ignore pure comment lines (start with ; or #), but not inline comments inside values
-        if ((line.startsWith(';') || line.startsWith('#')) && line.indexOf('=') < 0) continue;
-        // Section line with optional trailing comment after ]
-        if (line.startsWith('[') && line.contains(']')) {
-            int end = line.indexOf(']'); currentSection = line.mid(1, end - 1).trimmed().toLower();
-            continue;
+        if (line.startsWith(';') || line.startsWith('#')) continue; // pure comment line only
+        if (line.startsWith('[')) {
+            int close = line.indexOf(']');
+            if (close >= 0) {
+                currentSection = line.mid(1, close - 1).trimmed().toLower();
+                // ignore anything after ] (e.g. ;RGB)
+                continue;
+            }
         }
-        int eq = line.indexOf('='); if (eq < 0) continue; // skip lines without key=value
+        int eq = line.indexOf('=');
+        if (eq < 0) continue;
         QString key = line.left(eq).trimmed().toLower();
         QString value = line.mid(eq + 1).trimmed();
-        // Strip trailing semicolon from value only (CDI writes 0x000000;)
         if (value.endsWith(';')) value = value.left(value.length() - 1);
+        // Do NOT strip # from value — preserve hex colors like #445566
         if (key.isEmpty()) continue;
         qDebug() << "DEBUG section=" << currentSection << " key=" << key << " value=" << value;
         if (currentSection == "info" && (key.startsWith("parenttheme") || key == "parenttheme")) {
