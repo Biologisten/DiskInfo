@@ -72,3 +72,20 @@ private slots:
 
 QTEST_GUILESS_MAIN(ThemeTests)
 #include "theme_tests.moc"
+void inheritsMissingColoursParentFirst()
+{
+    QTemporaryDir tmp;
+    const QString selfDir = tmp.filePath("Child");
+    const QString parentDir = tmp.filePath("Parent");
+    const QString grandDir = tmp.filePath("Grand");
+    QDir().mkpath(selfDir); QDir().mkpath(parentDir); QDir().mkpath(grandDir);
+    QFile(selfDir+"/theme.ini").open(QIODevice::WriteOnly); QFile(selfDir+"/theme.ini").write("[Info]\nParentTheme1=Parent\nParentTheme2=Grand\n[Color]\nLabelText=0x010203;\n");
+    QFile(parentDir+"/theme.ini").open(QIODevice::WriteOnly); QFile(parentDir+"/theme.ini").write("[Color]\nGlass=0x111111;\nLabelText=0xAAAAAA;\n");
+    QFile(grandDir+"/theme.ini").open(QIODevice::WriteOnly); QFile(grandDir+"/theme.ini").write("[Color]\nGlass=0x222222;\nListBg1=0x333333;\n");
+    QHash<QString, Theme> themes{{"Child", Theme::parse(selfDir)}, {"Parent", Theme::parse(parentDir)}, {"Grand", Theme::parse(grandDir)}};
+    themes["Child"].resolve(themes);
+    QCOMPARE(themes["Child"].colors().labelText, QColor(0x01, 0x02, 0x03));
+    QCOMPARE(themes["Child"].colors().glass, QColor(0x11, 0x11, 0x11));
+    QCOMPARE(themes["Child"].colors().listBg1, QColor(0x33, 0x33, 0x33));
+    QCOMPARE(themes["Child"].searchDirectories().size(), 3);
+}

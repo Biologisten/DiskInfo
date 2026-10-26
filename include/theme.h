@@ -32,6 +32,13 @@ public:
     QColor backgroundColor() const;
     QString debugRaw(const QString &key) const { return m_raw.value(key); }
 
+    void resolve(const QHash<QString, Theme> &available);
+    bool isResolved() const;
+    QStringList searchDirectories() const;
+    QString assetPath(const QString &baseName, int zoomPercent) const;
+    QString backgroundPath(int zoomPercent) const;
+    bool hasOwnBackground() const;
+
 private:
     bool m_valid = false;
     QString m_directory;
@@ -39,5 +46,7 @@ private:
     int m_characterPosition = 0;
     ThemeColors m_colors;
     QColor m_backgroundColor;
-    QHash<QString, QString> m_raw; // section/key -> value
+    QHash<QString, QString> m_raw;
+    bool m_resolved = false;
+    QStringList m_searchDirectories;
 };
