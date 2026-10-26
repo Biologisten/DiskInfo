@@ -54,3 +54,6 @@ compile_commands.json
 
 # The entire build directory
 build/
+
+# Isolated development worktrees
+.worktrees/
