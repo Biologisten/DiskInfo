@@ -136,6 +136,92 @@ private slots:
         QCOMPARE(Theme::parseColor("AABBCC"), QColor(0xAA, 0xBB, 0xCC));
         QCOMPARE(Theme::parseColor("1193046"), QColor(0x12, 0x34, 0x56));
     }
+
+    void inheritsMissingColoursParentFirst()
+    {
+        QTemporaryDir tmp;
+        const QString selfDir = tmp.filePath("Child");
+        const QString parentDir = tmp.filePath("Parent");
+        const QString grandDir = tmp.filePath("Grand");
+        writeFile(selfDir + "/theme.ini", "[Info]\nParentTheme1=Parent\nParentTheme2=Grand\n[Color]\nLabelText=0x010203;\n");
+        writeFile(parentDir + "/theme.ini", "[Color]\nGlass=0x111111;\nLabelText=0xAAAAAA;\n");
+        writeFile(grandDir + "/theme.ini", "[Color]\nGlass=0x222222;\nListBg1=0x333333;\n");
+
+        QHash<QString, Theme> themes{
+            {"Child", Theme::parse(selfDir)},
+            {"Parent", Theme::parse(parentDir)},
+            {"Grand", Theme::parse(grandDir)},
+        };
+        themes["Child"].resolve(themes);
+
+        QCOMPARE(themes["Child"].colors().labelText, QColor(0x01, 0x02, 0x03));
+        QCOMPARE(themes["Child"].colors().glass, QColor(0x11, 0x11, 0x11));
+        QCOMPARE(themes["Child"].colors().listBg1, QColor(0x33, 0x33, 0x33));
+        QCOMPARE(themes["Child"].searchDirectories().size(), 3);
+    }
+
+    void breaksParentCycles()
+    {
+        QTemporaryDir tmp;
+        const QString aDir = tmp.filePath("A");
+        const QString bDir = tmp.filePath("B");
+        writeFile(aDir + "/theme.ini", "[Info]\nParentTheme1=B\n[Color]\nLabelText=0x010101;\n");
+        writeFile(bDir + "/theme.ini", "[Info]\nParentTheme1=A\n[Color]\nGlass=0x020202;\n");
+
+        QHash<QString, Theme> themes{{"A", Theme::parse(aDir)}, {"B", Theme::parse(bDir)}};
+        themes["A"].resolve(themes);
+        QCOMPARE(themes["A"].colors().labelText, QColor(0x01, 0x01, 0x01));
+        QCOMPARE(themes["A"].colors().glass, QColor(0x02, 0x02, 0x02));
+        QCOMPARE(themes["A"].searchDirectories(), QStringList({aDir, bDir}));
+    }
+
+    void picksNearestDpiAsset()
+    {
+        QTemporaryDir tmp;
+        const QString dir = tmp.filePath("Aoi");
+        writeFile(dir + "/theme.ini", "[Info]\nAuthor=test\n");
+        writeFile(dir + "/diskGood-100.png", "");
+        writeFile(dir + "/diskGood-200.png", "");
+        writeFile(dir + "/diskGood-300.png", "");
+
+        QHash<QString, Theme> themes{{"Aoi", Theme::parse(dir)}};
+        themes["Aoi"].resolve(themes);
+        QCOMPARE(themes["Aoi"].assetPath("diskGood", 150), dir + "/diskGood-200.png");
+        QCOMPARE(themes["Aoi"].assetPath("diskGood", 400), dir + "/diskGood-300.png");
+        QCOMPARE(themes["Aoi"].assetPath("diskGood", 100), dir + "/diskGood-100.png");
+        QVERIFY(themes["Aoi"].assetPath("missing", 100).isEmpty());
+    }
+
+    void childAssetWinsOverParentAsset()
+    {
+        QTemporaryDir tmp;
+        const QString childDir = tmp.filePath("Child");
+        const QString parentDir = tmp.filePath("Parent");
+        writeFile(childDir + "/theme.ini", "[Info]\nParentTheme1=Parent\n");
+        writeFile(parentDir + "/theme.ini", "[Info]\nAuthor=test\n");
+        writeFile(childDir + "/diskGood-100.png", "");
+        writeFile(parentDir + "/diskGood-200.png", "");
+
+        QHash<QString, Theme> themes{{"Child", Theme::parse(childDir)}, {"Parent", Theme::parse(parentDir)}};
+        themes["Child"].resolve(themes);
+        QCOMPARE(themes["Child"].assetPath("diskGood", 150), childDir + "/diskGood-100.png");
+    }
+
+    void resolvesBackgroundThroughParents()
+    {
+        QTemporaryDir tmp;
+        const QString childDir = tmp.filePath("AoiDark");
+        const QString parentDir = tmp.filePath("AoiNight");
+        writeFile(childDir + "/theme.ini", "[Info]\nParentTheme1=AoiNight\n");
+        writeFile(parentDir + "/theme.ini", "[Info]\nAuthor=test\n");
+        writeFile(parentDir + "/AoiBackground-300.png", "");
+
+        QHash<QString, Theme> themes{{"AoiDark", Theme::parse(childDir)}, {"AoiNight", Theme::parse(parentDir)}};
+        themes["AoiDark"].resolve(themes);
+        QCOMPARE(themes["AoiDark"].backgroundPath(100), parentDir + "/AoiBackground-300.png");
+        QVERIFY(!themes["AoiDark"].hasOwnBackground());
+        QVERIFY(themes["AoiNight"].hasOwnBackground());
+    }
 };
 
 QTEST_GUILESS_MAIN(ThemeTests)

@@ -28,12 +28,19 @@ public:
     static QColor parseColor(const QString &value, bool *ok = nullptr);
 
     bool isValid() const;
+    bool isResolved() const;
     QString name() const;
     QString directory() const;
     QStringList parentNames() const;
+    QStringList searchDirectories() const;
     int characterPosition() const;
     const ThemeColors &colors() const;
     QColor backgroundColor() const;
+
+    void resolve(const QHash<QString, Theme> &available);
+    QString assetPath(const QString &baseName, int zoomPercent) const;
+    QString backgroundPath(int zoomPercent) const;
+    bool hasOwnBackground() const;
 
 private:
     bool m_valid = false;

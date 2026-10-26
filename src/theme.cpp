@@ -1,8 +1,14 @@
 #include "theme.h"
 
+#include <algorithm>
+#include <cstdlib>
+#include <functional>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
+#include <QSet>
+#include <QVector>
 
 Theme::Theme() = default;
 
@@ -238,6 +244,201 @@ int Theme::characterPosition() const
 const ThemeColors &Theme::colors() const
 {
     return m_colors;
+}
+
+bool Theme::isResolved() const
+{
+    return m_resolved;
+}
+
+QStringList Theme::searchDirectories() const
+{
+    return m_searchDirectories;
+}
+
+void Theme::resolve(const QHash<QString, Theme> &available)
+{
+    m_searchDirectories.clear();
+    QSet<QString> visitedNames;
+    QVector<const Theme *> chain;
+
+    visitedNames.insert(name());
+    m_searchDirectories.append(m_directory);
+    chain.append(this);
+
+    std::function<void(const QStringList &)> visitParents = [&](const QStringList &parentList) {
+        for (const QString &pName : parentList) {
+            if (visitedNames.contains(pName)) {
+                continue;
+            }
+            const auto it = available.constFind(pName);
+            if (it == available.constEnd()) {
+                continue;
+            }
+            visitedNames.insert(pName);
+            const Theme *parentTheme = &it.value();
+            m_searchDirectories.append(parentTheme->m_directory);
+            chain.append(parentTheme);
+            visitParents(parentTheme->m_parents);
+        }
+    };
+
+    visitParents(m_parents);
+
+    auto findColor = [&](const QString &key, const QColor &fallback) -> QColor {
+        for (const Theme *t : chain) {
+            if (t->m_values.contains(key)) {
+                bool colorOk = false;
+                const QColor c = parseColor(t->m_values.value(key), &colorOk);
+                if (colorOk) {
+                    return c;
+                }
+            }
+        }
+        return fallback;
+    };
+
+    auto findListBg = [&](const QString &bkKey, const QString &bgKey, const QColor &fallback) -> QColor {
+        for (const Theme *t : chain) {
+            if (t->m_values.contains(bkKey)) {
+                bool bkOk = false;
+                const QColor c = parseColor(t->m_values.value(bkKey), &bkOk);
+                if (bkOk) {
+                    return c;
+                }
+            }
+            if (t->m_values.contains(bgKey)) {
+                bool bgOk = false;
+                const QColor c = parseColor(t->m_values.value(bgKey), &bgOk);
+                if (bgOk) {
+                    return c;
+                }
+            }
+        }
+        return fallback;
+    };
+
+    m_colors.labelText = findColor(QLatin1String("color/labeltext"), QColor(Qt::black));
+    m_colors.buttonText = findColor(QLatin1String("color/buttontext"), QColor(Qt::black));
+    m_colors.listText1 = findColor(QLatin1String("color/listtext1"), QColor(Qt::black));
+    m_colors.listText2 = findColor(QLatin1String("color/listtext2"), QColor(Qt::black));
+    m_colors.listLine1 = findColor(QLatin1String("color/listline1"), QColor(Qt::black));
+    m_colors.listLine2 = findColor(QLatin1String("color/listline2"), QColor(Qt::black));
+    m_colors.glass = findColor(QLatin1String("color/glass"), QColor(Qt::white));
+
+    m_colors.listBg1 = findListBg(QLatin1String("color/listbk1"), QLatin1String("color/listbg1"), QColor(Qt::white));
+    m_colors.listBg2 = findListBg(QLatin1String("color/listbk2"), QLatin1String("color/listbg2"), QColor(0xF8, 0xF8, 0xF8));
+
+    m_colors.glassAlpha = 128;
+    for (const Theme *t : chain) {
+        if (t->m_values.contains(QLatin1String("alpha/glassalpha"))) {
+            bool alphaOk = false;
+            const int a = t->m_values.value(QLatin1String("alpha/glassalpha")).toInt(&alphaOk);
+            if (alphaOk) {
+                m_colors.glassAlpha = a;
+                break;
+            }
+        }
+    }
+
+    m_characterPosition = 0;
+    for (const Theme *t : chain) {
+        if (t->m_values.contains(QLatin1String("character/position"))) {
+            bool posOk = false;
+            const int pos = t->m_values.value(QLatin1String("character/position")).toInt(&posOk);
+            if (posOk) {
+                m_characterPosition = pos;
+                break;
+            }
+        }
+    }
+
+    m_backgroundColor = QColor();
+    for (const Theme *t : chain) {
+        if (t->m_values.contains(QLatin1String("color/background"))) {
+            bool bgOk = false;
+            const QColor c = parseColor(t->m_values.value(QLatin1String("color/background")), &bgOk);
+            if (bgOk) {
+                m_backgroundColor = c;
+                break;
+            }
+        }
+    }
+
+    m_resolved = true;
+}
+
+QString Theme::assetPath(const QString &baseName, int zoomPercent) const
+{
+    const QString prefix = baseName + QLatin1Char('-');
+    const QString ext = QLatin1String(".png");
+
+    struct Candidate {
+        int suffix;
+        QString filePath;
+    };
+
+    for (const QString &dirPath : m_searchDirectories) {
+        const QDir dir(dirPath);
+        const QFileInfoList files = dir.entryInfoList(
+            QStringList({prefix + QLatin1Char('*') + ext}),
+            QDir::Files);
+
+        QVector<Candidate> candidates;
+        for (const QFileInfo &fi : files) {
+            const QString fn = fi.fileName();
+            if (fn.startsWith(prefix, Qt::CaseInsensitive) && fn.endsWith(ext, Qt::CaseInsensitive)) {
+                const QString numStr = fn.mid(prefix.length(), fn.length() - prefix.length() - ext.length());
+                bool ok = false;
+                const int s = numStr.toInt(&ok);
+                if (ok && s > 0) {
+                    candidates.append({s, fi.filePath()});
+                }
+            }
+        }
+
+        if (!candidates.isEmpty()) {
+            std::sort(candidates.begin(), candidates.end(), [zoomPercent](const Candidate &a, const Candidate &b) {
+                const int distA = std::abs(a.suffix - zoomPercent);
+                const int distB = std::abs(b.suffix - zoomPercent);
+                if (distA != distB) {
+                    return distA < distB;
+                }
+                return a.suffix > b.suffix;
+            });
+            return candidates.first().filePath;
+        }
+    }
+
+    return {};
+}
+
+QString Theme::backgroundPath(int zoomPercent) const
+{
+    const QRegularExpression regex(QStringLiteral("^(.+Background)-\\d+\\.png$"), QRegularExpression::CaseInsensitiveOption);
+    for (const QString &dirPath : m_searchDirectories) {
+        const QFileInfoList files = QDir(dirPath).entryInfoList(QDir::Files);
+        for (const QFileInfo &fi : files) {
+            const QRegularExpressionMatch match = regex.match(fi.fileName());
+            if (match.hasMatch()) {
+                const QString baseName = match.captured(1);
+                return assetPath(baseName, zoomPercent);
+            }
+        }
+    }
+    return {};
+}
+
+bool Theme::hasOwnBackground() const
+{
+    const QRegularExpression regex(QStringLiteral("^.+Background-\\d+\\.png$"), QRegularExpression::CaseInsensitiveOption);
+    const QFileInfoList files = QDir(m_directory).entryInfoList(QDir::Files);
+    for (const QFileInfo &fi : files) {
+        if (regex.match(fi.fileName()).hasMatch()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 QColor Theme::backgroundColor() const
