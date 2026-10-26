@@ -1,7 +1,10 @@
 #pragma once
 #include <QStringList>
 #include <QHash>
+#include <QString>
 #include "theme.h"
+#include "ziparchive.h"
+#include <QUuid>
 
 class ThemeManager
 {
@@ -13,6 +16,8 @@ public:
     QStringList themeNames() const;
     const Theme* theme(const QString &name) const;
     QString writableRoot() const;
+    ThemeZipInfo inspectZip(const QString &zipPath) const;
+    ThemeImportResult importZip(const QString &zipPath, bool overwriteExisting = false);
     static QStringList defaultThemeRoots();
     static QString defaultWritableRoot();
 
