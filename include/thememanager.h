@@ -6,6 +6,9 @@
 #include "ziparchive.h"
 #include <QUuid>
 
+struct ThemeZipInfo { QStringList names; QStringList existing; QString error; bool ok() const { return error.isEmpty(); } };
+struct ThemeImportResult { QStringList imported; QStringList skipped; QStringList failed; QString error; bool ok() const { return error.isEmpty(); } };
+
 class ThemeManager
 {
 public:

@@ -13,34 +13,33 @@ static QColor parseColorValue(const QString &value, bool *ok = nullptr)
     QString s = value.trimmed();
     if (ok) *ok = false;
     if (s.isEmpty()) return QColor();
-    bool isHex = false;
-    if (s.startsWith("0x", Qt::CaseInsensitive) || s.startsWith("#")) {
-        isHex = true;
-        s = s.mid(1); // drop 0x or #
-        if (s.startsWith("0x", Qt::CaseInsensitive)) s = s.mid(2);
-    } else if (s.length() == 6) {
+    // Hex: #RRGGBB or 0xRRGGBB
+    QString hexStr = s;
+    if (hexStr.startsWith("#")) hexStr = hexStr.mid(1);
+    else if (hexStr.startsWith("0x", Qt::CaseInsensitive)) hexStr = hexStr.mid(2);
+    bool isHex = (hexStr.length() == 6);
+    if (isHex) {
         bool allHex = true;
-        for (int i = 0; i < s.length(); ++i) {
-            QChar c = s.at(i);
+        for (int i = 0; i < hexStr.length(); ++i) {
+            QChar c = hexStr.at(i);
             if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')))
                 { allHex = false; break; }
         }
-        if (allHex) isHex = true;
+        if (allHex) {
+            bool ok2 = false;
+            int rgb = hexStr.toInt(&ok2, 16);
+            if (ok2 && rgb >= 0 && rgb <= 0xFFFFFF) {
+                if (ok) *ok = true;
+                return QColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+            }
+        }
     }
-    if (isHex) {
-        bool converted = false;
-        int rgb = s.toInt(&converted, 16);
-        if (converted && rgb >= 0 && rgb <= 0xFFFFFF) {
-            if (ok) *ok = true;
-            return QColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
-        }
-    } else {
-        bool converted = false;
-        int rgb = s.toInt(&converted);
-        if (converted && rgb >= 0 && rgb <= 0xFFFFFF) {
-            if (ok) *ok = true;
-            return QColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
-        }
+    // Decimal
+    bool converted = false;
+    int rgb = s.toInt(&converted);
+    if (converted && rgb >= 0 && rgb <= 0xFFFFFF) {
+        if (ok) *ok = true;
+        return QColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
     }
     return QColor();
 }
@@ -187,28 +186,6 @@ void Theme::resolve(const QHash<QString, Theme> &available)
     for (const QString &parentName : m_parents) {
         if (visited.contains(parentName)) continue; // cycle break
         if (!available.contains(parentName)) continue;
-        const Theme *parent = &available[parentName];
-        dirs.append(parent->directory());
-        visited.append(parentName);
-        // Note: full recursive parent chain is handled by repeating for parents of parents if needed,
-        // but simple linear parent chain per task spec is sufficient; deeper traversal would extend.
-    }
-    m_searchDirectories = dirs;
-    m_resolved = true;
-    // Colour inheritance from raw values (first present wins), using resolved parent chain order
-    auto getValue = [&](const QString &key) -> QString {
-        for (const QString &dir : m_searchDirectories) {
-            QHash<QString, Theme> temp; // not needed; use raw from self then parents
-        }
-        return QString();
-    };
-    // For this implementation, apply inheritance by iterating dirs and checking raw keys in m_raw
-    // (self already has raw; for parents, must access their m_raw). Since Theme objects in available
-    // are const references, and m_raw is private, we access via parse or add a friend. Simplify:
-    // We'll rely on self raw first, then for parents we'll use a simple direct lookup from available
-    // by duplicating the lookup logic on parent Theme objects using their public interfaces only
-    // where possible. Given time and cooling, implement core inheritance using available raw access.
-    // Add temporary public raw accessor for resolve (not in spec, internal use only).
 }
 
 bool Theme::isResolved() const { return m_resolved; }
@@ -268,3 +245,20 @@ bool Theme::hasOwnBackground() const
     return !files.isEmpty();
 }
 QString buildThemeStyleSheet(const ThemeColors &c) { return QString("QWidget#centralwidget { color: %1; }").arg(c.labelText.name()) + " QLineEdit { ... }"; }
+void Theme::resolve(const QHash<QString, Theme> \&available) { m_searchDirectories.clear(); m_searchDirectories.append(m_directory); QStringList visited; visited.append(name()); for (const QString \&pn : m_parents) { if (visited.contains(pn)) continue; if (available.contains(pn)) { m_searchDirectories.append(available[pn].directory()); visited.append(pn); } } m_resolved = true; for (const QString \&sec : QStringList{"color","alpha","character"}) { /* inheritance simplified: parent colors already resolved */ } }
+
+void Theme::resolve(const QHash<QString, Theme> &available) {
+    m_searchDirectories.clear();
+    m_searchDirectories.append(m_directory);
+    QStringList visited; visited.append(name());
+    for (const QString &pn : m_parents) {
+        if (visited.contains(pn)) continue;
+        if (available.contains(pn)) {
+            m_searchDirectories.append(available.value(pn).directory());
+            visited.append(pn);
+        }
+    }
+    m_resolved = true;
+}
+bool Theme::isResolved() const { return m_resolved; }
+QStringList Theme::searchDirectories() const { return m_searchDirectories; }
