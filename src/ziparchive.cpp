@@ -1,140 +1,69 @@
 #include "ziparchive.h"
+#include <QFileInfo>
+#include <QDir>
 
-#include <limits>
-#include <QStringList>
-
-ZipArchive::ZipArchive()
-{
-    mz_zip_zero_struct(&m_zip);
-}
-
-ZipArchive::~ZipArchive()
-{
-    close();
-}
+ZipArchive::ZipArchive() { mz_zip_zero_struct(&m_zip); m_open = false; }
+ZipArchive::~ZipArchive() { close(); }
 
 bool ZipArchive::open(const QString &path, QString *error)
 {
-    if (m_open) {
-        close();
-    }
-
-    mz_zip_zero_struct(&m_zip);
-    const mz_bool ok = mz_zip_reader_init_file(&m_zip, path.toUtf8().constData(), 0);
-    if (ok == MZ_FALSE) {
-        if (error) {
-            *error = QString::fromUtf8(mz_zip_get_error_string(mz_zip_get_last_error(&m_zip)));
-        }
-        return false;
-    }
-
-    m_open = true;
-    return true;
+    if (m_open) close();
+    m_open = (mz_zip_reader_init_file(&m_zip, path.toUtf8().constData(), 0) != MZ_FALSE);
+    if (!m_open && error) *error = QString::fromUtf8(mz_zip_get_error_string(m_zip.m_last_error));
+    return m_open;
 }
 
 void ZipArchive::close()
 {
-    if (m_open) {
-        mz_zip_reader_end(&m_zip);
-        mz_zip_zero_struct(&m_zip);
-        m_open = false;
-    }
+    if (m_open) { mz_zip_reader_end(&m_zip); m_open = false; mz_zip_zero_struct(&m_zip); }
 }
 
 QVector<ZipEntry> ZipArchive::entries()
 {
-    if (!m_open) {
-        return {};
-    }
-
-    const mz_uint numFiles = mz_zip_reader_get_num_files(&m_zip);
-    QVector<ZipEntry> list;
-    list.reserve(static_cast<qsizetype>(numFiles));
-
-    for (mz_uint i = 0; i < numFiles; ++i) {
+    QVector<ZipEntry> res;
+    if (!m_open) return res;
+    mz_uint32 num = mz_zip_reader_get_num_files(&m_zip);
+    for (mz_uint32 i = 0; i < num; ++i) {
         mz_zip_archive_file_stat stat;
-        if (!mz_zip_reader_file_stat(&m_zip, i, &stat)) {
-            continue;
-        }
-
+        if (mz_zip_reader_get_filename(&m_zip, i, nullptr, 0, nullptr) == 0) continue;
+        // Simplified: use file_stat
+        if (!mz_zip_reader_file_stat(&m_zip, i, &stat)) continue;
         ZipEntry e;
-        e.name = QString::fromUtf8(stat.m_filename);
-        e.uncompressedSize = stat.m_uncomp_size;
-        e.isDirectory = mz_zip_reader_is_file_a_directory(&m_zip, i) != MZ_FALSE;
-        e.isSymlink = isSymlinkExternalAttr(stat.m_external_attr);
-        e.index = static_cast<int>(i);
-        list.append(e);
+        char fname[1024];
+        mz_zip_reader_get_filename(&m_zip, i, fname, sizeof(fname), nullptr);
+        e.name = QString::fromUtf8(fname);
+        e.uncompressedSize = stat.m_uncompr_size;
+        e.isDirectory = mz_zip_reader_is_file_a_directory(&m_zip, i);
+        e.isSymlink = (stat.m_external_attr >> 16 & 0xF000u) == 0xA000u;
+        e.index = (int)i;
+        res.append(e);
     }
-
-    return list;
+    return res;
 }
 
 bool ZipArchive::read(const ZipEntry &entry, QByteArray *data, QString *error)
 {
-    if (!m_open || entry.index < 0) {
-        if (error) {
-            *error = QStringLiteral("Archive not open or invalid entry index");
-        }
-        return false;
-    }
-
-    if (entry.uncompressedSize > static_cast<quint64>(std::numeric_limits<qsizetype>::max())) {
-        if (error) {
-            *error = QStringLiteral("Entry too large to allocate in memory");
-        }
-        return false;
-    }
-
-    QByteArray buf;
-    buf.resize(static_cast<qsizetype>(entry.uncompressedSize));
-
-    const mz_bool ok = mz_zip_reader_extract_to_mem(
-        &m_zip,
-        static_cast<mz_uint>(entry.index),
-        buf.data(),
-        static_cast<size_t>(entry.uncompressedSize),
-        0);
-
-    if (ok == MZ_FALSE) {
-        if (error) {
-            *error = QString::fromUtf8(mz_zip_get_error_string(mz_zip_get_last_error(&m_zip)));
-        }
-        return false;
-    }
-
-    if (data) {
-        *data = buf;
-    }
+    if (!m_open) return false;
+    size_t size = 0;
+    void *p = mz_zip_reader_extract_to_heap(&m_zip, (mz_uint32)entry.index, &size, 0);
+    if (!p) { if (error) *error = QString::fromUtf8(mz_zip_get_error_string(m_zip.m_last_error)); return false; }
+    data->append((const char*)p, (int)size);
+    mz_free(p);
     return true;
 }
 
 bool ZipArchive::isSafePath(const QString &path)
 {
-    if (path.isEmpty() || path.contains(QLatin1Char('\0'))) {
-        return false;
+    if (path.isEmpty()) return false;
+    QString s = path;
+    s.replace('\\', '/');
+    if (s.startsWith('/')) return false;
+    if (QRegularExpression("^[A-Za-z]:").match(s).hasMatch()) return false;
+    QStringList parts = s.split('/');
+    for (const QString &p : parts) {
+        if (p == "..") return false;
+        if (p.contains('\0')) return false;
     }
-
-    QString p = path;
-    p.replace(QLatin1Char('\\'), QLatin1Char('/'));
-
-    if (p.startsWith(QLatin1Char('/'))) {
-        return false;
-    }
-
-    if (p.length() >= 2 && p.at(1) == QLatin1Char(':')) {
-        const char ch = p.at(0).toLatin1();
-        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
-            return false;
-        }
-    }
-
-    const QStringList parts = p.split(QLatin1Char('/'));
-    for (const QString &part : parts) {
-        if (part == QLatin1String("..")) {
-            return false;
-        }
-    }
-
     return true;
 }
 
