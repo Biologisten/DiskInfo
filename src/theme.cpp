@@ -445,3 +445,52 @@ QColor Theme::backgroundColor() const
 {
     return m_backgroundColor;
 }
+
+QString buildThemeStyleSheet(const ThemeColors &colors)
+{
+    auto rgba = [](const QColor &c, int alpha) -> QString {
+        const int a = std::clamp(alpha, 0, 255);
+        return QStringLiteral("rgba(%1, %2, %3, %4)")
+            .arg(c.red())
+            .arg(c.green())
+            .arg(c.blue())
+            .arg(a);
+    };
+
+    const QString labelHex = colors.labelText.name();
+    const QString listLineHex = colors.listLine1.name();
+    const QString listTextHex = colors.listText1.name();
+
+    const double lum = 0.299 * colors.glass.red() + 0.587 * colors.glass.green() + 0.114 * colors.glass.blue();
+    const QString selectedContrastHex = (lum > 128.0) ? QStringLiteral("#000000") : QStringLiteral("#ffffff");
+
+    const QString glassRgba = rgba(colors.glass, colors.glassAlpha);
+    const QString glassHoverRgba = rgba(colors.glass, colors.glassAlpha + 24);
+    const QString glassPressedRgba = rgba(colors.glass, colors.glassAlpha - 24);
+    const QString glassCheckedRgba = rgba(colors.glass, colors.glassAlpha + 40);
+
+    const QString listBg1Rgba = rgba(colors.listBg1, colors.glassAlpha);
+    const QString listBg2Rgba = rgba(colors.listBg2, colors.glassAlpha);
+
+    QString qss;
+    qss += QStringLiteral("QWidget#centralwidget { color: %1; }\n").arg(labelHex);
+    qss += QStringLiteral("QLabel { color: %1; }\n").arg(labelHex);
+    qss += QStringLiteral("QLineEdit { background-color: %1; color: %2; border: 1px solid %3; border-radius: 3px; padding: 2px; }\n")
+        .arg(glassRgba, labelHex, listLineHex);
+    qss += QStringLiteral("QPushButton { color: %1; background-color: %2; border: 1px solid %3; border-radius: 4px; padding: 4px 8px; }\n")
+        .arg(labelHex, glassRgba, listLineHex);
+    qss += QStringLiteral("QPushButton:hover { background-color: %1; }\n").arg(glassHoverRgba);
+    qss += QStringLiteral("QPushButton:pressed { background-color: %1; }\n").arg(glassPressedRgba);
+    qss += QStringLiteral("QPushButton:checked { background-color: %1; border: 1px solid %2; }\n")
+        .arg(glassCheckedRgba, listTextHex);
+    qss += QStringLiteral("QHeaderView::section { background-color: %1; color: %2; border: 0; border-right: 1px solid %3; border-bottom: 1px solid %3; padding: 4px; }\n")
+        .arg(glassRgba, listTextHex, listLineHex);
+    qss += QStringLiteral("QTableWidget { background-color: %1; alternate-background-color: %2; gridline-color: %3; }\n")
+        .arg(listBg1Rgba, listBg2Rgba, listLineHex);
+    qss += QStringLiteral("QTableWidget::item { color: %1; }\n").arg(listTextHex);
+    qss += QStringLiteral("QTableWidget::item:selected { color: %1; }\n").arg(selectedContrastHex);
+    qss += QStringLiteral("QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }\n");
+    qss += QStringLiteral("QTableCornerButton::section { background-color: %1; }\n").arg(glassRgba);
+
+    return qss;
+}

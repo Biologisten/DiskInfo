@@ -19,6 +19,8 @@ struct ThemeColors
     int glassAlpha = 128;
 };
 
+QString buildThemeStyleSheet(const ThemeColors &colors);
+
 class Theme
 {
 public:

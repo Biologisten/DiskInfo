@@ -392,6 +392,20 @@ private slots:
         QVERIFY(!result.ok());
         QVERIFY(!QFileInfo::exists(tmp.filePath("evil.png")));
     }
+
+    void buildsThemeStyleSheet()
+    {
+        ThemeColors colors;
+        colors.glass = QColor(10, 20, 30);
+        colors.glassAlpha = 128;
+        colors.labelText = QColor(1, 2, 3);
+        colors.listLine1 = QColor(7, 8, 9);
+
+        const QString qss = buildThemeStyleSheet(colors);
+        QVERIFY(qss.contains("rgba(10, 20, 30, 128)"));
+        QVERIFY(qss.contains("color: #010203"));
+        QVERIFY(qss.contains("gridline-color: #070809"));
+    }
 };
 
 QTEST_GUILESS_MAIN(ThemeTests)

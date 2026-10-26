@@ -2,6 +2,8 @@
 
 #include "utils.h"
 #include "gridview.h"
+#include "theme.h"
+#include "thememanager.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -10,8 +12,10 @@
 #include <QMainWindow>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSettings>
 #include <QTableWidget>
+#include <QTimer>
 #include <QWidget>
 #include <QProcess>
 #include <cmath>
@@ -95,6 +99,50 @@ private:
     void addSmartAttributesTable(const QJsonArray &attributes);
     void transformWindow();
     void mousePressEvent(QMouseEvent*);
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
+private:
+    ThemeManager themeManager;
+    Theme currentTheme;
+    bool themedMode = false;
+    bool themeLayoutActive = false;
+    bool builtinThemeActive = false;
+    QString currentThemeName;
+
+    QTimer themeBackgroundTimer;
+    QPixmap themeBackgroundSource;
+    QPalette defaultCentralPalette;
+    QPalette defaultTablePalette;
+    bool defaultViewportAutoFillBackground = false;
+    bool defaultAlternatingRowColors = false;
+    int defaultMinimumWidth = 0;
+    QSize defaultMaximumSize;
+
+    QSpacerItem *infoSpacer = nullptr;
+    QSpacerItem *gridLeftSpacer = nullptr;
+    QVector<QPair<int, QSpacerItem *>> verticalSpacers;
+    QSpacerItem *characterSpacer = nullptr;
+
+    QMenu *themeMenu = nullptr;
+    QActionGroup *themeActionGroup = nullptr;
+
+    void setupThemeMenu();
+    void rebuildThemeMenu();
+    void setThemeSelection(const QString &name, bool persist);
+    void importThemesFromZip();
+    void openThemesFolder();
+
+    void applyThemeVisuals(const Theme &theme);
+    void clearThemeVisuals();
+    void updateThemeBackground();
+    int themeZoomPercent() const;
+    void applyThemeColors(const ThemeColors &colors);
+    void restoreDefaultColors();
+    void initializeDefaultThemeState();
+    void refreshCurrentDevice();
+    QString themeButtonTextColor() const;
 
 private:
     QString mbSymbol;
