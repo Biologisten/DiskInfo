@@ -100,5 +100,24 @@ install(FILES "dist/${PROJECT_NAME}.svg"
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
     qt_finalize_executable(${PROJECT_NAME})
 endif()
+
+option(BUILD_TESTING "Build QDiskInfo tests" OFF)
+include(CTest)
+
+if(BUILD_TESTING)
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Gui)
+    add_executable(qdiskinfo_theme_tests
+        tests/theme_tests.cpp
+        src/theme.cpp
+    )
+    target_include_directories(qdiskinfo_theme_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(qdiskinfo_theme_tests PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
+        Qt${QT_VERSION_MAJOR}::Test
+    )
+    add_test(NAME qdiskinfo_theme_tests COMMAND qdiskinfo_theme_tests)
+endif()
+
 include(FeatureSummary)
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)
