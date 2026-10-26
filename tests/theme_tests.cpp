@@ -1,5 +1,7 @@
 #include "theme.h"
 #include "thememanager.h"
+#include "ziparchive.h"
+#include "miniz.h"
 
 #include <QDir>
 #include <QFile>
@@ -29,6 +31,26 @@ void writeFile(const QString &path, const QByteArray &data)
         return {};
 
     return file.readAll();
+}
+
+bool writeZip(const QString &path, const QList<QPair<QString, QByteArray>> &files)
+{
+    mz_zip_archive zip;
+    mz_zip_zero_struct(&zip);
+    bool ok = mz_zip_writer_init_file(&zip, path.toUtf8().constData(), 0) != MZ_FALSE;
+    if (ok) {
+        for (const auto &file : files) {
+            if (!mz_zip_writer_add_mem(&zip, file.first.toUtf8().constData(),
+                                       file.second.constData(), static_cast<size_t>(file.second.size()), MZ_BEST_SPEED)) {
+                ok = false;
+                break;
+            }
+        }
+    }
+    if (ok)
+        ok = mz_zip_writer_finalize_archive(&zip) != MZ_FALSE;
+    mz_zip_writer_end(&zip);
+    return ok;
 }
 
 } // namespace
@@ -249,6 +271,44 @@ private slots:
         ThemeManager manager(QStringList{tmp.filePath("missing")}, tmp.filePath("writable"));
         manager.reload();
         QVERIFY(manager.themeNames().isEmpty());
+    }
+
+    void readsZipEntries()
+    {
+        QTemporaryDir tmp;
+        const QString zipPath = tmp.filePath("theme.zip");
+        QVERIFY(writeZip(zipPath, {
+            {"CdiResource/themes/Aoi/theme.ini", QByteArray("[Info]\n")},
+            {"CdiResource/themes/Aoi/diskGood-300.png", QByteArray("png")},
+        }));
+
+        ZipArchive zip;
+        QString error;
+        QVERIFY2(zip.open(zipPath, &error), qPrintable(error));
+        QCOMPARE(zip.entries().size(), 2);
+        QCOMPARE(zip.entries().at(1).name, QString("CdiResource/themes/Aoi/diskGood-300.png"));
+
+        QByteArray data;
+        QVERIFY2(zip.read(zip.entries().at(1), &data, &error), qPrintable(error));
+        QCOMPARE(data, QByteArray("png"));
+    }
+
+    void rejectsUnsafeZipPaths()
+    {
+        QVERIFY(ZipArchive::isSafePath("CdiResource/themes/Aoi/theme.ini"));
+        QVERIFY(ZipArchive::isSafePath("Aoi/diskGood-300.png"));
+        QVERIFY(!ZipArchive::isSafePath("../evil.png"));
+        QVERIFY(!ZipArchive::isSafePath("Aoi/../../evil.png"));
+        QVERIFY(!ZipArchive::isSafePath("/etc/passwd"));
+        QVERIFY(!ZipArchive::isSafePath("C:/Windows/evil.png"));
+        QVERIFY(!ZipArchive::isSafePath("C:\\Windows\\evil.png"));
+        QVERIFY(!ZipArchive::isSafePath(""));
+    }
+
+    void detectsSymlinkExternalAttributes()
+    {
+        QVERIFY(ZipArchive::isSymlinkExternalAttr(0xA1FF0000u));
+        QVERIFY(!ZipArchive::isSymlinkExternalAttr(0x81A40000u));
     }
 };
 

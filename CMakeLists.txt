@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(QDiskInfo VERSION 0.4 LANGUAGES CXX)
+project(QDiskInfo VERSION 0.4 LANGUAGES C CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -31,6 +31,7 @@ file(GLOB_RECURSE PROJECT_SOURCES
     src/*.ui
     src/resources.qrc
 )
+set(PROJECT_SOURCES ${PROJECT_SOURCES} third_party/miniz/miniz.c)
 
 if(INCLUDE_OPTIONAL_RESOURCES)
     set(PROJECT_SOURCES ${PROJECT_SOURCES} dist/theme/theme_resources.qrc)
@@ -66,7 +67,10 @@ if(CALL_LUPDATE)
     add_dependencies(${PROJECT_NAME} update_translations)
 endif()
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/third_party/miniz
+)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     PROJECT_VERSION_MAJOR=${${PROJECT_NAME}_VERSION_MAJOR}
@@ -110,8 +114,13 @@ if(BUILD_TESTING)
         tests/theme_tests.cpp
         src/theme.cpp
         src/thememanager.cpp
+        src/ziparchive.cpp
+        third_party/miniz/miniz.c
     )
-    target_include_directories(qdiskinfo_theme_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_include_directories(qdiskinfo_theme_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/third_party/miniz
+    )
     target_link_libraries(qdiskinfo_theme_tests PRIVATE
         Qt${QT_VERSION_MAJOR}::Core
         Qt${QT_VERSION_MAJOR}::Gui
