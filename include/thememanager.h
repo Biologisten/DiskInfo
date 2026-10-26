@@ -6,6 +6,23 @@
 #include <QString>
 #include <QStringList>
 
+struct ThemeZipInfo
+{
+    QStringList names;
+    QStringList existing;
+    QString error;
+    bool ok() const { return error.isEmpty(); }
+};
+
+struct ThemeImportResult
+{
+    QStringList imported;
+    QStringList skipped;
+    QStringList failed;
+    QString error;
+    bool ok() const { return error.isEmpty(); }
+};
+
 class ThemeManager
 {
 public:
@@ -17,6 +34,9 @@ public:
     QStringList themeNames() const;
     const Theme *theme(const QString &name) const;
     QString writableRoot() const;
+
+    ThemeZipInfo inspectZip(const QString &zipPath) const;
+    ThemeImportResult importZip(const QString &zipPath, bool overwriteExisting);
 
     static QStringList defaultThemeRoots();
     static QString defaultWritableRoot();

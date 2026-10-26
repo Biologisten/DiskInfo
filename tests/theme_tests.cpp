@@ -53,6 +53,19 @@ bool writeZip(const QString &path, const QList<QPair<QString, QByteArray>> &file
     return ok;
 }
 
+bool cdiTestZip(const QString &path)
+{
+    return writeZip(path, {
+        {"CdiResource/themes/Aoi/theme.ini", QByteArray("[Info]\nAuthor=test\n")},
+        {"CdiResource/themes/Aoi/AoiBackground-300.png", QByteArray("bg")},
+        {"CdiResource/themes/Aoi/diskGood-300.png", QByteArray("good")},
+        {"CdiResource/themes/AoiNight/theme.ini", QByteArray("[Info]\nParentTheme1=Aoi\n")},
+        {"CdiResource/themes/AoiNight/diskGood-300.png", QByteArray("night")},
+        {"CdiResource/themes/Aoi/convert.bat", QByteArray("del *.*")},
+        {"CdiResource/language/English.lang", QByteArray("not a theme")},
+    });
+}
+
 } // namespace
 
 class ThemeTests : public QObject
@@ -309,6 +322,75 @@ private slots:
     {
         QVERIFY(ZipArchive::isSymlinkExternalAttr(0xA1FF0000u));
         QVERIFY(!ZipArchive::isSymlinkExternalAttr(0x81A40000u));
+    }
+
+    void inspectsAndImportsThemes()
+    {
+        QTemporaryDir tmp;
+        const QString writable = tmp.filePath("themes");
+        const QString zipPath = tmp.filePath("aoi.zip");
+        QVERIFY(cdiTestZip(zipPath));
+        ThemeManager manager(QStringList{}, writable);
+
+        const ThemeZipInfo info = manager.inspectZip(zipPath);
+        QVERIFY2(info.ok(), qPrintable(info.error));
+        QCOMPARE(info.names, QStringList({"Aoi", "AoiNight"}));
+        QVERIFY(info.existing.isEmpty());
+
+        const ThemeImportResult result = manager.importZip(zipPath, false);
+        QVERIFY2(result.ok(), qPrintable(result.error));
+        QCOMPARE(result.imported, QStringList({"Aoi", "AoiNight"}));
+        QVERIFY(QFileInfo(writable + "/Aoi/theme.ini").isFile());
+        QVERIFY(QFileInfo(writable + "/Aoi/diskGood-300.png").isFile());
+        QVERIFY(!QFileInfo::exists(writable + "/Aoi/convert.bat"));
+        QVERIFY(!QFileInfo::exists(writable + "/language/English.lang"));
+    }
+
+    void skipsOrOverwritesExistingThemes()
+    {
+        QTemporaryDir tmp;
+        const QString writable = tmp.filePath("themes");
+        writeFile(writable + "/Aoi/theme.ini", "[Info]\nAuthor=old\n");
+        const QString zipPath = tmp.filePath("aoi.zip");
+        QVERIFY(cdiTestZip(zipPath));
+        ThemeManager manager(QStringList{}, writable);
+
+        ThemeImportResult skipped = manager.importZip(zipPath, false);
+        QVERIFY(skipped.ok());
+        QCOMPARE(skipped.skipped, QStringList({"Aoi"}));
+        QCOMPARE(skipped.imported, QStringList({"AoiNight"}));
+        QCOMPARE(readFile(writable + "/Aoi/theme.ini"), QByteArray("[Info]\nAuthor=old\n"));
+
+        ThemeImportResult overwritten = manager.importZip(zipPath, true);
+        QVERIFY(overwritten.ok());
+        QCOMPARE(overwritten.imported, QStringList({"Aoi", "AoiNight"}));
+        QCOMPARE(readFile(writable + "/Aoi/theme.ini"), QByteArray("[Info]\nAuthor=test\n"));
+    }
+
+    void rejectsZipWithoutThemes()
+    {
+        QTemporaryDir tmp;
+        const QString zipPath = tmp.filePath("empty.zip");
+        QVERIFY(writeZip(zipPath, {{"readme.txt", QByteArray("x")}}));
+        ThemeManager manager(QStringList{}, tmp.filePath("themes"));
+        const ThemeZipInfo info = manager.inspectZip(zipPath);
+        QVERIFY(!info.ok());
+        QVERIFY(info.error.contains("No CDI themes"));
+    }
+
+    void rejectsTraversalEntries()
+    {
+        QTemporaryDir tmp;
+        const QString writable = tmp.filePath("themes");
+        const QString zipPath = tmp.filePath("evil.zip");
+        QVERIFY(writeZip(zipPath, {
+            {"CdiResource/themes/Aoi/theme.ini", QByteArray("[Info]\n")},
+            {"CdiResource/themes/Aoi/../../evil.png", QByteArray("evil")},
+        }));
+        ThemeManager manager(QStringList{}, writable);
+        const ThemeImportResult result = manager.importZip(zipPath, false);
+        QVERIFY(!result.ok());
+        QVERIFY(!QFileInfo::exists(tmp.filePath("evil.png")));
     }
 };
 
