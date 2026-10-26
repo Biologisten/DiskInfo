@@ -1,4 +1,5 @@
 #include "theme.h"
+#include "thememanager.h"
 
 #include <QDir>
 #include <QFile>
@@ -221,6 +222,33 @@ private slots:
         QCOMPARE(themes["AoiDark"].backgroundPath(100), parentDir + "/AoiBackground-300.png");
         QVERIFY(!themes["AoiDark"].hasOwnBackground());
         QVERIFY(themes["AoiNight"].hasOwnBackground());
+    }
+
+    void discoversThemesAndUserShadowsSystem()
+    {
+        QTemporaryDir tmp;
+        const QString userRoot = tmp.filePath("user");
+        const QString systemRoot = tmp.filePath("system");
+        writeFile(userRoot + "/Aoi/theme.ini", "[Info]\nAuthor=user\n");
+        writeFile(systemRoot + "/Aoi/theme.ini", "[Info]\nAuthor=system\n");
+        writeFile(systemRoot + "/Night/theme.ini", "[Info]\nAuthor=system\n");
+        writeFile(systemRoot + "/Broken/readme.txt", "not a theme");
+
+        ThemeManager manager(QStringList{userRoot, systemRoot}, userRoot);
+        manager.reload();
+
+        QCOMPARE(manager.themeNames(), QStringList({"Aoi", "Night"}));
+        QVERIFY(manager.theme("Aoi") != nullptr);
+        QCOMPARE(manager.theme("Aoi")->directory(), userRoot + "/Aoi");
+        QVERIFY(manager.theme("Missing") == nullptr);
+    }
+
+    void ignoresMissingRoots()
+    {
+        QTemporaryDir tmp;
+        ThemeManager manager(QStringList{tmp.filePath("missing")}, tmp.filePath("writable"));
+        manager.reload();
+        QVERIFY(manager.themeNames().isEmpty());
     }
 };
 
