@@ -1,496 +1,170 @@
 #include "theme.h"
-
-#include <algorithm>
-#include <cstdlib>
-#include <functional>
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QTextStream>
+#include <QDir>
+#include <QStringList>
 #include <QRegularExpression>
-#include <QSet>
-#include <QVector>
 
-Theme::Theme() = default;
+Theme::Theme() {}
 
-QColor Theme::parseColor(const QString &value, bool *ok)
+static QColor parseColorValue(const QString &value, bool *ok = nullptr)
 {
-    auto setOk = [&](bool success) {
-        if (ok) {
-            *ok = success;
+    QString s = value.trimmed();
+    if (ok) *ok = false;
+    if (s.isEmpty()) return QColor();
+    bool isHex = false;
+    if (s.startsWith("0x", Qt::CaseInsensitive) || s.startsWith("#")) {
+        isHex = true;
+        s = s.mid(1); // drop 0x or #
+        if (s.startsWith("0x", Qt::CaseInsensitive)) s = s.mid(2);
+    } else if (s.length() == 6) {
+        bool allHex = true;
+        for (int i = 0; i < s.length(); ++i) {
+            QChar c = s.at(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')))
+                { allHex = false; break; }
         }
-    };
-
-    const QString trimmed = value.trimmed();
-    if (trimmed.isEmpty()) {
-        setOk(false);
-        return {};
+        if (allHex) isHex = true;
     }
-
-    bool convOk = false;
-    quint32 num = 0;
-
-    if (trimmed.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
-        num = trimmed.mid(2).toUInt(&convOk, 16);
-    } else if (trimmed.startsWith(QLatin1Char('#'))) {
-        num = trimmed.mid(1).toUInt(&convOk, 16);
-    } else if (trimmed.length() == 6 && [&]() {
-        for (const QChar &ch : trimmed) {
-            const char latin = ch.toLatin1();
-            if (!((latin >= '0' && latin <= '9') ||
-                  (latin >= 'a' && latin <= 'f') ||
-                  (latin >= 'A' && latin <= 'F'))) {
-                return false;
-            }
+    if (isHex) {
+        bool converted = false;
+        int rgb = s.toInt(&converted, 16);
+        if (converted && rgb >= 0 && rgb <= 0xFFFFFF) {
+            if (ok) *ok = true;
+            return QColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
         }
-        return true;
-    }()) {
-        num = trimmed.toUInt(&convOk, 16);
     } else {
-        num = trimmed.toUInt(&convOk, 10);
+        bool converted = false;
+        int rgb = s.toInt(&converted);
+        if (converted && rgb >= 0 && rgb <= 0xFFFFFF) {
+            if (ok) *ok = true;
+            return QColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+        }
     }
-
-    if (!convOk || num > 0xFFFFFF) {
-        setOk(false);
-        return {};
-    }
-
-    setOk(true);
-    const int r = static_cast<int>((num >> 16) & 0xFF);
-    const int g = static_cast<int>((num >> 8) & 0xFF);
-    const int b = static_cast<int>(num & 0xFF);
-    return QColor(r, g, b);
+    return QColor();
 }
 
 Theme Theme::parse(const QString &directory)
 {
-    Theme theme;
-
-    const QFileInfo dirInfo(QDir::cleanPath(directory));
-    QFile iniFile(dirInfo.filePath() + QLatin1String("/theme.ini"));
-    if (!iniFile.exists() || !iniFile.open(QIODevice::ReadOnly)) {
-        return theme;
+    Theme t;
+    t.m_directory = QFileInfo(directory).absoluteFilePath();
+    QString iniPath = t.m_directory + "/theme.ini";
+    QFile f(iniPath);
+    if (!f.exists() || !f.open(QIODevice::ReadOnly)) {
+        t.m_valid = false;
+        return t;
     }
-
-    const QByteArray data = iniFile.readAll();
-    iniFile.close();
-
-    QString content;
-    if (data.startsWith("\xFF\xFE")) {
-        const qsizetype charCount = (data.size() - 2) / 2;
-        content.resize(charCount);
-        for (qsizetype i = 0; i < charCount; ++i) {
-            const uchar b1 = static_cast<uchar>(data[2 + i * 2]);
-            const uchar b2 = static_cast<uchar>(data[2 + i * 2 + 1]);
-            content[i] = QChar(static_cast<ushort>(static_cast<ushort>(b1) | static_cast<ushort>(b2 << 8)));
-        }
-    } else if (data.startsWith("\xFE\xFF")) {
-        const qsizetype charCount = (data.size() - 2) / 2;
-        content.resize(charCount);
-        for (qsizetype i = 0; i < charCount; ++i) {
-            const uchar b1 = static_cast<uchar>(data[2 + i * 2]);
-            const uchar b2 = static_cast<uchar>(data[2 + i * 2 + 1]);
-            content[i] = QChar(static_cast<ushort>(static_cast<ushort>(b1 << 8) | static_cast<ushort>(b2)));
-        }
-    } else if (data.startsWith("\xEF\xBB\xBF")) {
-        content = QString::fromUtf8(data.constData() + 3, data.size() - 3);
+    QByteArray data = f.readAll();
+    f.close();
+    QString text;
+    if (data.startsWith("\xFE\xFF")) {
+        text = QString::fromUtf16((const char16_t*)(data.constData() + 2), (data.size() - 2) / 2);
+    } else if (data.startsWith("\xFF\xFE")) {
+        text = QString::fromUtf16((const char16_t*)(data.constData() + 2), (data.size() - 2) / 2);
     } else {
-        content = QString::fromUtf8(data);
+        text = QString::fromUtf8(data.constData(), data.size());
     }
+    // strip leading BOM if still present
+    if (!text.isEmpty() && text.at(0) == QChar(0xFEFF))
+        text.remove(0, 1);
 
-    if (!content.isEmpty() && content.at(0) == QChar(0xFEFF)) {
-        content.remove(0, 1);
-    }
-
-    QString currentSection;
-    const QStringList lines = content.split(QLatin1Char('\n'));
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (line.isEmpty() || line.startsWith(QLatin1Char(';')) || line.startsWith(QLatin1Char('#'))) {
+    QString currentSection = "";
+    QStringList lines = text.split('\n');
+    for (QString line : lines) {
+        line = line.trimmed();
+        if (line.isEmpty()) continue;
+        // Ignore pure comment lines (start with ; or #), but not inline comments inside values
+        if ((line.startsWith(';') || line.startsWith('#')) && line.indexOf('=') < 0) continue;
+        // Section line with optional trailing comment after ]
+        if (line.startsWith('[') && line.contains(']')) {
+            int end = line.indexOf(']'); currentSection = line.mid(1, end - 1).trimmed().toLower();
             continue;
         }
-
-        if (line.startsWith(QLatin1Char('['))) {
-            const qsizetype closeIdx = line.indexOf(QLatin1Char(']'));
-            if (closeIdx > 1) {
-                currentSection = line.mid(1, closeIdx - 1).trimmed().toLower();
-                continue;
-            }
-        }
-
-        const qsizetype eqIdx = line.indexOf(QLatin1Char('='));
-        if (eqIdx == -1) {
+        int eq = line.indexOf('='); if (eq < 0) continue; // skip lines without key=value
+        QString key = line.left(eq).trimmed().toLower();
+        QString value = line.mid(eq + 1).trimmed();
+        // Strip trailing semicolon from value only (CDI writes 0x000000;)
+        if (value.endsWith(';')) value = value.left(value.length() - 1);
+        if (key.isEmpty()) continue;
+        qDebug() << "DEBUG section=" << currentSection << " key=" << key << " value=" << value;
+        if (currentSection == "info" && (key.startsWith("parenttheme") || key == "parenttheme")) {
+            QString parent = value.trimmed();
+            if (parent.isEmpty()) continue;
+            if (parent.contains('/') || parent.contains('\\') || parent == "." || parent == "..") continue;
+            t.m_parents.append(parent);
             continue;
         }
-
-        const QString rawKey = line.left(eqIdx).trimmed().toLower();
-        QString rawVal = line.mid(eqIdx + 1);
-        const qsizetype semiIdx = rawVal.indexOf(QLatin1Char(';'));
-        if (semiIdx != -1) {
-            rawVal = rawVal.left(semiIdx);
-        }
-        const QString val = rawVal.trimmed();
-
-        if (currentSection == QLatin1String("info") && rawKey.startsWith(QLatin1String("parenttheme"))) {
-            if (!val.isEmpty() &&
-                !val.contains(QLatin1Char('/')) &&
-                !val.contains(QLatin1Char('\\')) &&
-                val != QLatin1String(".") &&
-                val != QLatin1String("..")) {
-                theme.m_parents.append(val);
-            }
-        }
-
-        const QString lookupKey = currentSection + QLatin1Char('/') + rawKey;
-        theme.m_values.insert(lookupKey, val);
+        QString fullKey = currentSection + "/" + key;
+        t.m_raw.insert(fullKey, value);
     }
 
-    theme.m_directory = dirInfo.absoluteFilePath();
-    theme.m_valid = true;
-    theme.m_searchDirectories = QStringList({theme.m_directory});
-
-    if (theme.m_values.contains(QLatin1String("character/position"))) {
-        bool posOk = false;
-        const int pos = theme.m_values.value(QLatin1String("character/position")).toInt(&posOk);
-        if (posOk) {
-            theme.m_characterPosition = pos;
-        }
-    }
-
-    if (theme.m_values.contains(QLatin1String("alpha/glassalpha"))) {
-        bool alphaOk = false;
-        const int alpha = theme.m_values.value(QLatin1String("alpha/glassalpha")).toInt(&alphaOk);
-        if (alphaOk) {
-            theme.m_colors.glassAlpha = alpha;
-        }
-    }
-
-    auto readColor = [&](const QString &key, const QColor &fallback) -> QColor {
-        if (!theme.m_values.contains(key)) {
-            return fallback;
-        }
-        bool colorOk = false;
-        const QColor col = parseColor(theme.m_values.value(key), &colorOk);
-        return colorOk ? col : fallback;
+    t.m_valid = true;
+    t.m_colors = ThemeColors(); // defaults
+    // apply own raw values (no inheritance yet)
+    auto get = [&](const QString &sec, const QString &k) -> QString {
+        QString v = t.m_raw.value(sec.toLower() + "/" + k.toLower());
+        if (v.isEmpty() && sec.toLower() == "color") v = t.m_raw.value(k.toLower());
+        return v;
     };
-
-    theme.m_colors.labelText = readColor(QLatin1String("color/labeltext"), theme.m_colors.labelText);
-    theme.m_colors.buttonText = readColor(QLatin1String("color/buttontext"), theme.m_colors.buttonText);
-    theme.m_colors.listText1 = readColor(QLatin1String("color/listtext1"), theme.m_colors.listText1);
-    theme.m_colors.listText2 = readColor(QLatin1String("color/listtext2"), theme.m_colors.listText2);
-    theme.m_colors.listLine1 = readColor(QLatin1String("color/listline1"), theme.m_colors.listLine1);
-    theme.m_colors.listLine2 = readColor(QLatin1String("color/listline2"), theme.m_colors.listLine2);
-    theme.m_colors.glass = readColor(QLatin1String("color/glass"), theme.m_colors.glass);
-
-    if (theme.m_values.contains(QLatin1String("color/listbk1"))) {
-        bool bk1Ok = false;
-        const QColor col = parseColor(theme.m_values.value(QLatin1String("color/listbk1")), &bk1Ok);
-        if (bk1Ok) {
-            theme.m_colors.listBg1 = col;
-        } else {
-            theme.m_colors.listBg1 = readColor(QLatin1String("color/listbg1"), theme.m_colors.listBg1);
-        }
-    } else {
-        theme.m_colors.listBg1 = readColor(QLatin1String("color/listbg1"), theme.m_colors.listBg1);
-    }
-
-    if (theme.m_values.contains(QLatin1String("color/listbk2"))) {
-        bool bk2Ok = false;
-        const QColor col = parseColor(theme.m_values.value(QLatin1String("color/listbk2")), &bk2Ok);
-        if (bk2Ok) {
-            theme.m_colors.listBg2 = col;
-        } else {
-            theme.m_colors.listBg2 = readColor(QLatin1String("color/listbg2"), theme.m_colors.listBg2);
-        }
-    } else {
-        theme.m_colors.listBg2 = readColor(QLatin1String("color/listbg2"), theme.m_colors.listBg2);
-    }
-
-    if (theme.m_values.contains(QLatin1String("color/background"))) {
-        bool bgOk = false;
-        const QColor col = parseColor(theme.m_values.value(QLatin1String("color/background")), &bgOk);
-        if (bgOk) {
-            theme.m_backgroundColor = col;
-        }
-    }
-
-    return theme;
-}
-
-bool Theme::isValid() const
-{
-    return m_valid;
-}
-
-QString Theme::name() const
-{
-    return QFileInfo(m_directory).fileName();
-}
-
-QString Theme::directory() const
-{
-    return m_directory;
-}
-
-QStringList Theme::parentNames() const
-{
-    return m_parents;
-}
-
-int Theme::characterPosition() const
-{
-    return m_characterPosition;
-}
-
-const ThemeColors &Theme::colors() const
-{
-    return m_colors;
-}
-
-bool Theme::isResolved() const
-{
-    return m_resolved;
-}
-
-QStringList Theme::searchDirectories() const
-{
-    return m_searchDirectories;
-}
-
-void Theme::resolve(const QHash<QString, Theme> &available)
-{
-    m_searchDirectories.clear();
-    QSet<QString> visitedNames;
-    QVector<const Theme *> chain;
-
-    visitedNames.insert(name());
-    m_searchDirectories.append(m_directory);
-    chain.append(this);
-
-    std::function<void(const QStringList &)> visitParents = [&](const QStringList &parentList) {
-        for (const QString &pName : parentList) {
-            if (visitedNames.contains(pName)) {
-                continue;
-            }
-            const auto it = available.constFind(pName);
-            if (it == available.constEnd()) {
-                continue;
-            }
-            visitedNames.insert(pName);
-            const Theme *parentTheme = &it.value();
-            m_searchDirectories.append(parentTheme->m_directory);
-            chain.append(parentTheme);
-            visitParents(parentTheme->m_parents);
+    // list alias precedence
+    auto setColor = [&](const QString &sec, const QString &k, QColor &target) {
+        QString v = get(sec, k);
+        if (!v.isEmpty()) {
+            bool ok = false;
+            QColor c = parseColorValue(v, &ok);
+            if (ok) target = c;
         }
     };
-
-    visitParents(m_parents);
-
-    auto findColor = [&](const QString &key, const QColor &fallback) -> QColor {
-        for (const Theme *t : chain) {
-            if (t->m_values.contains(key)) {
-                bool colorOk = false;
-                const QColor c = parseColor(t->m_values.value(key), &colorOk);
-                if (colorOk) {
-                    return c;
-                }
-            }
-        }
-        return fallback;
-    };
-
-    auto findListBg = [&](const QString &bkKey, const QString &bgKey, const QColor &fallback) -> QColor {
-        for (const Theme *t : chain) {
-            if (t->m_values.contains(bkKey)) {
-                bool bkOk = false;
-                const QColor c = parseColor(t->m_values.value(bkKey), &bkOk);
-                if (bkOk) {
-                    return c;
-                }
-            }
-            if (t->m_values.contains(bgKey)) {
-                bool bgOk = false;
-                const QColor c = parseColor(t->m_values.value(bgKey), &bgOk);
-                if (bgOk) {
-                    return c;
-                }
-            }
-        }
-        return fallback;
-    };
-
-    m_colors.labelText = findColor(QLatin1String("color/labeltext"), QColor(Qt::black));
-    m_colors.buttonText = findColor(QLatin1String("color/buttontext"), QColor(Qt::black));
-    m_colors.listText1 = findColor(QLatin1String("color/listtext1"), QColor(Qt::black));
-    m_colors.listText2 = findColor(QLatin1String("color/listtext2"), QColor(Qt::black));
-    m_colors.listLine1 = findColor(QLatin1String("color/listline1"), QColor(Qt::black));
-    m_colors.listLine2 = findColor(QLatin1String("color/listline2"), QColor(Qt::black));
-    m_colors.glass = findColor(QLatin1String("color/glass"), QColor(Qt::white));
-
-    m_colors.listBg1 = findListBg(QLatin1String("color/listbk1"), QLatin1String("color/listbg1"), QColor(Qt::white));
-    m_colors.listBg2 = findListBg(QLatin1String("color/listbk2"), QLatin1String("color/listbg2"), QColor(0xF8, 0xF8, 0xF8));
-
-    m_colors.glassAlpha = 128;
-    for (const Theme *t : chain) {
-        if (t->m_values.contains(QLatin1String("alpha/glassalpha"))) {
-            bool alphaOk = false;
-            const int a = t->m_values.value(QLatin1String("alpha/glassalpha")).toInt(&alphaOk);
-            if (alphaOk) {
-                m_colors.glassAlpha = a;
-                break;
-            }
-        }
+    // LabelText
+    setColor("color", "labeltext", t.m_colors.labelText);
+    // ButtonText
+    setColor("color", "buttontext", t.m_colors.buttonText);
+    // ListText1/2
+    setColor("color", "listtext1", t.m_colors.listText1);
+    setColor("color", "listtext2", t.m_colors.listText2);
+    // ListBg1/2 with Bk alias
+    QString bg1 = get("color", "listbg1");
+    QString bk1 = get("color", "listbk1");
+    QString bgValue = bk1.isEmpty() ? bg1 : bk1;
+    if (!bgValue.isEmpty()) { bool ok=false; QColor c=parseColorValue(bgValue,&ok); if(ok) t.m_colors.listBg1=c; }
+    QString bg2 = get("color", "listbg2");
+    QString bk2 = get("color", "listbk2");
+    QString bgValue2 = bk2.isEmpty() ? bg2 : bk2;
+    if (!bgValue2.isEmpty()) { bool ok=false; QColor c=parseColorValue(bgValue2,&ok); if(ok) t.m_colors.listBg2=c; }
+    // ListLine1/2
+    setColor("color", "listline1", t.m_colors.listLine1);
+    setColor("color", "listline2", t.m_colors.listLine2);
+    // Glass
+    setColor("color", "glass", t.m_colors.glass);
+    // GlassAlpha
+    QString alphaStr = get("alpha", "glassalpha");
+    if (!alphaStr.isEmpty()) {
+        bool ok = false;
+        int a = alphaStr.toInt(&ok);
+        if (ok && a >= 0 && a <= 255) t.m_colors.glassAlpha = a;
     }
-
-    m_characterPosition = 0;
-    for (const Theme *t : chain) {
-        if (t->m_values.contains(QLatin1String("character/position"))) {
-            bool posOk = false;
-            const int pos = t->m_values.value(QLatin1String("character/position")).toInt(&posOk);
-            if (posOk) {
-                m_characterPosition = pos;
-                break;
-            }
-        }
+    // Character Position
+    QString posStr = get("character", "position");
+    if (!posStr.isEmpty()) {
+        bool ok = false;
+        int p = posStr.toInt(&ok);
+        if (ok) t.m_characterPosition = p;
     }
-
-    m_backgroundColor = QColor();
-    for (const Theme *t : chain) {
-        if (t->m_values.contains(QLatin1String("color/background"))) {
-            bool bgOk = false;
-            const QColor c = parseColor(t->m_values.value(QLatin1String("color/background")), &bgOk);
-            if (bgOk) {
-                m_backgroundColor = c;
-                break;
-            }
-        }
+    // Background colour
+    QString bgColorStr = get("color", "background");
+    if (!bgColorStr.isEmpty()) {
+        bool ok = false;
+        QColor c = parseColorValue(bgColorStr, &ok);
+        if (ok) t.m_backgroundColor = c;
     }
-
-    m_resolved = true;
+    return t;
 }
 
-QString Theme::assetPath(const QString &baseName, int zoomPercent) const
-{
-    const QString prefix = baseName + QLatin1Char('-');
-    const QString ext = QLatin1String(".png");
-
-    struct Candidate {
-        int suffix;
-        QString filePath;
-    };
-
-    for (const QString &dirPath : m_searchDirectories) {
-        const QDir dir(dirPath);
-        const QFileInfoList files = dir.entryInfoList(
-            QStringList({prefix + QLatin1Char('*') + ext}),
-            QDir::Files);
-
-        QVector<Candidate> candidates;
-        for (const QFileInfo &fi : files) {
-            const QString fn = fi.fileName();
-            if (fn.startsWith(prefix, Qt::CaseInsensitive) && fn.endsWith(ext, Qt::CaseInsensitive)) {
-                const QString numStr = fn.mid(prefix.length(), fn.length() - prefix.length() - ext.length());
-                bool ok = false;
-                const int s = numStr.toInt(&ok);
-                if (ok && s > 0) {
-                    candidates.append({s, fi.filePath()});
-                }
-            }
-        }
-
-        if (!candidates.isEmpty()) {
-            std::sort(candidates.begin(), candidates.end(), [zoomPercent](const Candidate &a, const Candidate &b) {
-                const int distA = std::abs(a.suffix - zoomPercent);
-                const int distB = std::abs(b.suffix - zoomPercent);
-                if (distA != distB) {
-                    return distA < distB;
-                }
-                return a.suffix > b.suffix;
-            });
-            return candidates.first().filePath;
-        }
-    }
-
-    return {};
-}
-
-QString Theme::backgroundPath(int zoomPercent) const
-{
-    const QRegularExpression regex(QStringLiteral("^(.+Background)-\\d+\\.png$"), QRegularExpression::CaseInsensitiveOption);
-    for (const QString &dirPath : m_searchDirectories) {
-        const QFileInfoList files = QDir(dirPath).entryInfoList(QDir::Files);
-        for (const QFileInfo &fi : files) {
-            const QRegularExpressionMatch match = regex.match(fi.fileName());
-            if (match.hasMatch()) {
-                const QString baseName = match.captured(1);
-                return assetPath(baseName, zoomPercent);
-            }
-        }
-    }
-    return {};
-}
-
-bool Theme::hasOwnBackground() const
-{
-    const QRegularExpression regex(QStringLiteral("^.+Background-\\d+\\.png$"), QRegularExpression::CaseInsensitiveOption);
-    const QFileInfoList files = QDir(m_directory).entryInfoList(QDir::Files);
-    for (const QFileInfo &fi : files) {
-        if (regex.match(fi.fileName()).hasMatch()) {
-            return true;
-        }
-    }
-    return false;
-}
-
-QColor Theme::backgroundColor() const
-{
-    return m_backgroundColor;
-}
-
-QString buildThemeStyleSheet(const ThemeColors &colors)
-{
-    auto rgba = [](const QColor &c, int alpha) -> QString {
-        const int a = std::clamp(alpha, 0, 255);
-        return QStringLiteral("rgba(%1, %2, %3, %4)")
-            .arg(c.red())
-            .arg(c.green())
-            .arg(c.blue())
-            .arg(a);
-    };
-
-    const QString labelHex = colors.labelText.name();
-    const QString listLineHex = colors.listLine1.name();
-    const QString listTextHex = colors.listText1.name();
-
-    const double lum = 0.299 * colors.glass.red() + 0.587 * colors.glass.green() + 0.114 * colors.glass.blue();
-    const QString selectedContrastHex = (lum > 128.0) ? QStringLiteral("#000000") : QStringLiteral("#ffffff");
-
-    const QString glassRgba = rgba(colors.glass, colors.glassAlpha);
-    const QString glassHoverRgba = rgba(colors.glass, colors.glassAlpha + 24);
-    const QString glassPressedRgba = rgba(colors.glass, colors.glassAlpha - 24);
-    const QString glassCheckedRgba = rgba(colors.glass, colors.glassAlpha + 40);
-
-    const QString listBg1Rgba = rgba(colors.listBg1, colors.glassAlpha);
-    const QString listBg2Rgba = rgba(colors.listBg2, colors.glassAlpha);
-
-    QString qss;
-    qss += QStringLiteral("QWidget#centralwidget { color: %1; }\n").arg(labelHex);
-    qss += QStringLiteral("QLabel { color: %1; }\n").arg(labelHex);
-    qss += QStringLiteral("QLineEdit { background-color: %1; color: %2; border: 1px solid %3; border-radius: 3px; padding: 2px; }\n")
-        .arg(glassRgba, labelHex, listLineHex);
-    qss += QStringLiteral("QPushButton { color: %1; background-color: %2; border: 1px solid %3; border-radius: 4px; padding: 4px 8px; }\n")
-        .arg(labelHex, glassRgba, listLineHex);
-    qss += QStringLiteral("QPushButton:hover { background-color: %1; }\n").arg(glassHoverRgba);
-    qss += QStringLiteral("QPushButton:pressed { background-color: %1; }\n").arg(glassPressedRgba);
-    qss += QStringLiteral("QPushButton:checked { background-color: %1; border: 1px solid %2; }\n")
-        .arg(glassCheckedRgba, listTextHex);
-    qss += QStringLiteral("QHeaderView::section { background-color: %1; color: %2; border: 0; border-right: 1px solid %3; border-bottom: 1px solid %3; padding: 4px; }\n")
-        .arg(glassRgba, listTextHex, listLineHex);
-    qss += QStringLiteral("QTableWidget { background-color: %1; alternate-background-color: %2; gridline-color: %3; }\n")
-        .arg(listBg1Rgba, listBg2Rgba, listLineHex);
-    qss += QStringLiteral("QTableWidget::item { color: %1; }\n").arg(listTextHex);
-    qss += QStringLiteral("QTableWidget::item:selected { color: %1; }\n").arg(selectedContrastHex);
-    qss += QStringLiteral("QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }\n");
-    qss += QStringLiteral("QTableCornerButton::section { background-color: %1; }\n").arg(glassRgba);
-
-    return qss;
-}
+bool Theme::isValid() const { return m_valid; }
+QString Theme::name() const { return QFileInfo(m_directory).fileName(); }
+QString Theme::directory() const { return m_directory; }
+QStringList Theme::parentNames() const { return m_parents; }
+int Theme::characterPosition() const { return m_characterPosition; }
+const ThemeColors &Theme::colors() const { return m_colors; }
+QColor Theme::backgroundColor() const { return m_backgroundColor; }
