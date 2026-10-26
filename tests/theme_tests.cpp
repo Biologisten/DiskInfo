@@ -1,4 +1,6 @@
+#include <QDir>
 #include "theme.h"
+#include "thememanager.h"
 #include <QTest>
 #include <QTemporaryDir>
 #include <QFile>
@@ -88,4 +90,34 @@ void inheritsMissingColoursParentFirst()
     QCOMPARE(themes["Child"].colors().glass, QColor(0x11, 0x11, 0x11));
     QCOMPARE(themes["Child"].colors().listBg1, QColor(0x33, 0x33, 0x33));
     QCOMPARE(themes["Child"].searchDirectories().size(), 3);
+}
+
+void discoversThemesAndUserShadowsSystem()
+{
+    QTemporaryDir tmp;
+    const QString userRoot = tmp.filePath("user");
+    const QString systemRoot = tmp.filePath("system");
+    QDir().mkpath(userRoot+"/Aoi"); QDir().mkpath(systemRoot+"/Aoi"); QDir().mkpath(systemRoot+"/Night");
+    QFile(userRoot+"/Aoi/theme.ini").open(QIODevice::WriteOnly); QFile(userRoot+"/Aoi/theme.ini").write("[Info]
+Author=user
+");
+    QFile(systemRoot+"/Aoi/theme.ini").open(QIODevice::WriteOnly); QFile(systemRoot+"/Aoi/theme.ini").write("[Info]
+Author=system
+");
+    QFile(systemRoot+"/Night/theme.ini").open(QIODevice::WriteOnly); QFile(systemRoot+"/Night/theme.ini").write("[Info]
+Author=system
+");
+    ThemeManager manager(QStringList{userRoot, systemRoot}, userRoot);
+    manager.reload();
+    QCOMPARE(manager.themeNames(), QStringList({"Aoi", "Night"}));
+    QVERIFY(manager.theme("Aoi") != nullptr);
+    QCOMPARE(manager.theme("Aoi")->directory(), userRoot + "/Aoi");
+    QVERIFY(manager.theme("Missing") == nullptr);
+}
+void ignoresMissingRoots()
+{
+    QTemporaryDir tmp;
+    ThemeManager manager(QStringList{tmp.filePath("missing")}, tmp.filePath("writable"));
+    manager.reload();
+    QVERIFY(manager.themeNames().isEmpty());
 }

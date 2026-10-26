@@ -113,6 +113,7 @@ if(BUILD_TESTING)
     add_executable(qdiskinfo_theme_tests
         tests/theme_tests.cpp
         src/theme.cpp
+        src/thememanager.cpp
     )
     target_include_directories(qdiskinfo_theme_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/include
