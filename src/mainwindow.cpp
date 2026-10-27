@@ -54,8 +54,8 @@ MainWindow::MainWindow(QWidget *parent)
     temperatureValue = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("temperatureValueLabel"));
     healthStatusValue = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("healthStatusValueLabel"));
 
-    temperatureLabelHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("healthStatusLabelHorizozontal"));
-    healthStatusLabelHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("temperatureLabelHorizontal"));
+    temperatureLabelHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("temperatureLabelHorizontal"));
+    healthStatusLabelHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("healthStatusLabelHorizontal"));
     temperatureValueHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("temperatureValueLabelHorizontal"));
     healthStatusValueHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("healthStatusValueLabelHorizontal"));
     temperatureLabelVertical = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("temperatureLabel"));
