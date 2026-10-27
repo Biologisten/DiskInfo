@@ -50,6 +50,11 @@ history lives in its own repository. The fork starts from upstream QDiskInfo
 - The compile-time theme mode and its `INCLUDE_OPTIONAL_RESOURCES` and
   `CHARACTER_IS_RIGHT` options.
 - The placeholder `dist/theme` resources that were only used by that mode.
+- The AppImage packaging script and the GitHub Actions job that built and
+  uploaded AppImages; the fork publishes nothing and is built from source.
+- The unreferenced `dist/QDiskInfo.png` and `dist/QDiskInfo-256x256.png`
+  icons, the unused upstream `crowdin.yml` and the plan and design documents
+  under `docs/superpowers/` for the finished runtime theme work.
 
 ### Fixed
 
