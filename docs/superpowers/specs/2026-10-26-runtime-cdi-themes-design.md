@@ -254,8 +254,16 @@ The menu rebuilds on `aboutToShow` and after import.
 - `include/thememanager.h`, `src/thememanager.cpp` — discovery, ZIP inspection
   and import.
 - `include/ziparchive.h`, `src/ziparchive.cpp` — miniz C++ wrapper.
+- `include/iconfallback.h`, `src/iconfallback.cpp` — desktop icon theme lookup
+  with bundled, tinted SVG fallbacks for `go-previous`, `go-next`,
+  `visibility` and `hint`.
+- `dist/icons/{go-previous,go-next,visibility,hint}.svg` — QDiskInfo's own
+  fallback artwork (not CDI artwork), registered in `src/resources.qrc`.
 - `third_party/miniz/miniz.c`, `miniz.h`, `LICENSE`.
-- `tests/theme_tests.cpp` — parser, inheritance, asset and ZIP tests.
+- `tests/theme_tests.cpp` — parser, inheritance, asset and ZIP tests
+  (`qdiskinfo_theme_tests`).
+- `tests/icon_tests.cpp` — bundled icons, fallback priority and control-level
+  tests (`qdiskinfo_icon_tests`).
 - `docs/superpowers/specs/2026-10-26-runtime-cdi-themes-design.md` — this file.
 - `docs/superpowers/plans/2026-10-26-runtime-cdi-themes.md` — implementation
   plan.
@@ -263,9 +271,16 @@ The menu rebuilds on `aboutToShow` and after import.
 **Modified**
 
 - `include/mainwindow.h`, `src/mainwindow.cpp` — menu, apply/clear, reversible
-  layout, background, styling, status illustration, display refresh.
-- `CMakeLists.txt` — C language, miniz, optional tests.
-- `README.md` — runtime theme and import instructions.
+  layout, background, styling, icon-fallback refresh on theme changes, display
+  refresh.
+- `src/resources.qrc` — registers the four fallback SVGs.
+- `CMakeLists.txt` — C language, miniz, `qdiskinfo_theme_tests` and
+  `qdiskinfo_icon_tests` behind `BUILD_TESTING`; the legacy
+  `INCLUDE_OPTIONAL_RESOURCES` / `CHARACTER_IS_RIGHT` paths are gone.
+- `README.md` — runtime theme/import instructions, bundled-icon note and how to
+  run the tests.
+- `.github/workflows/build.yaml` — `tests` job that runs `ctest` on every push
+  and caches pacman packages and ccache output.
 
 ## Verification
 
@@ -280,6 +295,15 @@ The menu rebuilds on `aboutToShow` and after import.
 - Background prefix detection.
 - ZIP open/read, unsafe path rejection, symlink rejection, limits, import,
   overwrite/skip, nested theme roots and unsupported entries.
+- Bundled icons: all four SVGs load to a non-empty pixmap and take the
+  requested tint colour.
+- Fallback selection: with no desktop icon theme the bundled icon is returned;
+  a temporary theme that ships `go-previous` wins untouched.
+- Real `MainWindow` without an icon theme (fake `smartctl`/`pkexec`, test-mode
+  settings, offscreen platform): the navigation buttons and the serial action
+  keep visible icons, the button size hint keeps its icon box; a runtime theme
+  tints the fallback to `LabelText`, and the serial reveal toggle stays visible
+  in both states.
 
 ### Manual
 
@@ -293,3 +317,9 @@ The menu rebuilds on `aboutToShow` and after import.
   and skip.
 - Compare no-theme appearance against upstream.
 - Verify disk scanning, JSON export, self-tests and the grid view still work.
+- Without a desktop icon theme (e.g. `hicolor`), verify the navigation arrows
+  and the serial reveal eye are visible in Default and themed modes; with a
+  working theme (Breeze/Adwaita/Papirus), verify the native icons are still
+  used.
+- Run both CTest suites; the icon suite runs headless with
+  `QT_QPA_PLATFORM=offscreen`.
