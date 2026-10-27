@@ -82,6 +82,7 @@ private:
     QMenu *menuDisk;
     QMenu *selfTestMenu;
     QAction *selfTestLogAction;
+    QAction *serialEchoAction = nullptr;
     QActionGroup *disksGroup;
     QJsonArray devices;
     QStringList deviceOutputs;
@@ -149,6 +150,8 @@ private:
     void initializeDefaultThemeState();
     void refreshCurrentDevice();
     QString themeButtonTextColor() const;
+    QColor iconForegroundColor() const;
+    void updateIconFallbacks();
 
 private:
     QString mbSymbol;

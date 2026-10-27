@@ -23,6 +23,35 @@
 const int PRECISION_TOTALS_TO_STR = 2;
 const int PRECISION_CAPACITY_TO_STR = 0;
 
+namespace {
+
+QIcon iconFromResources(const QString &name, const QColor &color)
+{
+    QIcon icon(QStringLiteral(":/icons/%1.svg").arg(name));
+    const QPixmap source = icon.pixmap(QSize(64, 64));
+    if (source.isNull()) {
+        return icon;
+    }
+
+    QPixmap tinted = source;
+    QPainter painter(&tinted);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(tinted.rect(), color);
+    painter.end();
+    return QIcon(tinted);
+}
+
+QIcon desktopIcon(const QString &name, const QColor &color)
+{
+    const QIcon themeIcon = QIcon::fromTheme(name);
+    if (!themeIcon.pixmap(QSize(16, 16)).isNull()) {
+        return themeIcon;
+    }
+    return iconFromResources(name, color);
+}
+
+} // namespace
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -140,15 +169,16 @@ MainWindow::MainWindow(QWidget *parent)
     ui->actionCyclic_Navigation->setChecked(settings.value("CyclicNavigation", false).toBool());
     ui->actionUse_GB_instead_of_TB->setChecked(settings.value("UseGB", false).toBool());
 
-    QAction *toggleEchoModeAction = serialNumberLineEdit->addAction(QIcon::fromTheme(QStringLiteral("visibility")), QLineEdit::TrailingPosition);
-    connect(toggleEchoModeAction, &QAction::triggered, this, [=]() {
+    serialEchoAction = serialNumberLineEdit->addAction(
+        desktopIcon(QStringLiteral("visibility"), iconForegroundColor()),
+        QLineEdit::TrailingPosition);
+    connect(serialEchoAction, &QAction::triggered, this, [=]() {
         if (serialNumberLineEdit->echoMode() == QLineEdit::Password) {
             serialNumberLineEdit->setEchoMode(QLineEdit::Normal);
-            toggleEchoModeAction->setIcon(QIcon::fromTheme(QStringLiteral("hint")));
         } else if (serialNumberLineEdit->echoMode() == QLineEdit::Normal) {
             serialNumberLineEdit->setEchoMode(QLineEdit::Password);
-            toggleEchoModeAction->setIcon(QIcon::fromTheme(QStringLiteral("visibility")));
         }
+        updateIconFallbacks();
     });
 
     QPair<QStringList, QJsonArray> values = Utils.scanDevices(initializing);
@@ -192,6 +222,8 @@ MainWindow::MainWindow(QWidget *parent)
     gbSymbol = locale.formattedDataSize(1 << 30, 1, QLocale::DataSizeTraditionalFormat).split(' ')[1];
     tbSymbol = locale.formattedDataSize(qint64(1) << 40, 1, QLocale::DataSizeTraditionalFormat).split(' ')[1];
     pbSymbol = locale.formattedDataSize(qint64(1) << 50, 1, QLocale::DataSizeTraditionalFormat).split(' ')[1];
+
+    updateIconFallbacks();
 }
 
 MainWindow::~MainWindow()
@@ -1863,6 +1895,8 @@ void MainWindow::applyThemeColors(const ThemeColors &colors)
     tableWidget->viewport()->setAutoFillBackground(false);
 
     cw->setStyleSheet(buildThemeStyleSheet(colors));
+
+    updateIconFallbacks();
 }
 
 void MainWindow::restoreDefaultColors()
@@ -1873,6 +1907,8 @@ void MainWindow::restoreDefaultColors()
     tableWidget->setPalette(defaultTablePalette);
     tableWidget->setAlternatingRowColors(defaultAlternatingRowColors);
     tableWidget->viewport()->setAutoFillBackground(defaultViewportAutoFillBackground);
+
+    updateIconFallbacks();
 }
 
 void MainWindow::updateThemeBackground()
@@ -2125,4 +2161,29 @@ QString MainWindow::themeButtonTextColor() const
         return currentTheme.colors().buttonText.name();
     }
     return QStringLiteral("black");
+}
+
+QColor MainWindow::iconForegroundColor() const
+{
+    if (themedMode && !builtinThemeActive) {
+        return currentTheme.colors().labelText;
+    }
+    return palette().color(QPalette::ButtonText);
+}
+
+void MainWindow::updateIconFallbacks()
+{
+    const QColor color = iconForegroundColor();
+
+    if (prevButton) {
+        prevButton->setIcon(desktopIcon(QStringLiteral("go-previous"), color));
+    }
+    if (nextButton) {
+        nextButton->setIcon(desktopIcon(QStringLiteral("go-next"), color));
+    }
+    if (serialEchoAction && serialNumberLineEdit) {
+        const bool hidden = serialNumberLineEdit->echoMode() == QLineEdit::Password;
+        serialEchoAction->setIcon(
+            desktopIcon(hidden ? QStringLiteral("visibility") : QStringLiteral("hint"), color));
+    }
 }

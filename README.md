@@ -74,7 +74,7 @@ For Qt >=6.7 this is done automatically when running `make`.
 
 ## Common Issues
 ### Icons are Missing
-If you are using QDiskInfo outside KDE, the arrows on the navigation keys and some other icons may be missing. To fix this install the Qt6 Configuration Tool (qt6ct) and append `export QT_QPA_PLATFORMTHEME=qt6ct` to the file `/etc/environment`
+The disk navigation arrows and the serial number reveal button fall back to icons bundled with QDiskInfo (rendered through Qt's SVG image plugin, `qt6-svg`/`libqt6svg6`/`qt6-qtsvg`), so they work without a desktop icon theme. Icons in menus and toolbars still come from the system theme; if those are missing install the Qt6 Configuration Tool (qt6ct) and append `export QT_QPA_PLATFORMTHEME=qt6ct` to the file `/etc/environment`
 
 ## Using CrystalDiskInfo Anime Themes
 You can use the CrystalDiskInfo editions as runtime themes, without rebuilding QDiskInfo:<br>
