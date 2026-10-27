@@ -138,6 +138,27 @@ private slots:
         QVERIFY(!Theme::parse(tmp.filePath("Missing")).isValid());
     }
 
+    void parsesUtf16BomThemeIni()
+    {
+        QTemporaryDir tmp;
+        const QString dir = tmp.filePath("Utf16");
+        const QString text = QStringLiteral("[Color]\r\nLabelText=0x0A0B0C;\r\n[Alpha]\r\nGlassAlpha=99;\r\n");
+        QByteArray data;
+        data.append(char(0xFF));
+        data.append(char(0xFE));
+        for (const QChar &ch : text) {
+            const ushort unit = ch.unicode();
+            data.append(char(unit & 0xFF));
+            data.append(char((unit >> 8) & 0xFF));
+        }
+        writeFile(dir + "/theme.ini", data);
+
+        const Theme theme = Theme::parse(dir);
+        QVERIFY(theme.isValid());
+        QCOMPARE(theme.colors().labelText, QColor(0x0A, 0x0B, 0x0C));
+        QCOMPARE(theme.colors().glassAlpha, 99);
+    }
+
     void inheritsMissingColoursParentFirst()
     {
         QTemporaryDir tmp;
@@ -251,6 +272,19 @@ private slots:
         QVERIFY(manager.themeNames().isEmpty());
     }
 
+    void sortsThemeNamesCaseInsensitively()
+    {
+        QTemporaryDir tmp;
+        const QString root = tmp.filePath("themes");
+        writeFile(root + "/beta/theme.ini", "[Info]\n");
+        writeFile(root + "/Alpha/theme.ini", "[Info]\n");
+        writeFile(root + "/alpha/theme.ini", "[Info]\n");
+
+        ThemeManager manager(QStringList{root}, tmp.filePath("writable"));
+        manager.reload();
+        QCOMPARE(manager.themeNames(), QStringList({"Alpha", "alpha", "beta"}));
+    }
+
     void readsZipEntries()
     {
         QTemporaryDir tmp;
@@ -309,6 +343,27 @@ private slots:
         QVERIFY(QFileInfo(writable + "/Aoi/diskGood-300.png").isFile());
         QVERIFY(!QFileInfo::exists(writable + "/Aoi/convert.bat"));
         QVERIFY(!QFileInfo::exists(writable + "/language/English.lang"));
+    }
+
+    void inspectsRootLevelThemeZip()
+    {
+        QTemporaryDir tmp;
+        const QString zipPath = tmp.filePath("RootTheme.zip");
+        QVERIFY(writeZip(zipPath, {
+            {"theme.ini", QByteArray("[Info]\nAuthor=test\n")},
+            {"diskGood-300.png", QByteArray("good")},
+        }));
+        ThemeManager manager(QStringList{}, tmp.filePath("themes"));
+
+        const ThemeZipInfo info = manager.inspectZip(zipPath);
+        QVERIFY2(info.ok(), qPrintable(info.error));
+        QCOMPARE(info.names, QStringList({"RootTheme"}));
+
+        const ThemeImportResult result = manager.importZip(zipPath, false);
+        QVERIFY2(result.ok(), qPrintable(result.error));
+        QCOMPARE(result.imported, QStringList({"RootTheme"}));
+        QVERIFY(QFileInfo(tmp.filePath("themes/RootTheme/theme.ini")).isFile());
+        QVERIFY(QFileInfo(tmp.filePath("themes/RootTheme/diskGood-300.png")).isFile());
     }
 
     void skipsOrOverwritesExistingThemes()
