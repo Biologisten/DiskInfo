@@ -38,3 +38,12 @@ Rulings:
 
 - Repair: `tests/theme_tests.cpp` rewritten to the plan's full 19-test suite; CMake test target now builds `theme.cpp`, `thememanager.cpp`, `ziparchive.cpp` and `miniz.c`. RED captured: theme.cpp syntax errors, miniz API mismatch, missing `buildThemeStyleSheet` declaration.
 - Repair: `theme.h`/`theme.cpp`, `thememanager.h`/`thememanager.cpp`, `ziparchive.cpp` re-implemented to the plan. App and test targets build warning-free; suite green: 19 passed / 0 failed, 0.03 s.
+- Task 6: reviewed — menu, persistence, artwork and colours are real; fixed theme switches to start from the default palettes so a second theme cannot inherit the first one's palette.
+- Task 7: complete — reversible layout and drive illustration (commit with Task 8).
+- Task 8: complete — built-in compile-time theme, startup precedence, Clear Settings, README.
+- Ruling, Task 7: `updateThemeBackground` anchors the built-in theme by `CHARACTER_IS_RIGHT` because `currentTheme` is empty for it — cost if wrong: built-in background anchored on the wrong side.
+- Ruling, Task 7: health text keeps the mode-based percentage branch (compact while themed, `<br>` otherwise), matching upstream rendering for whichever label is visible — cost if wrong: cosmetic.
+- Ruling, Task 8: the Built-in menu entry and built-in startup are compile-time guarded with `#if INCLUDE_OPTIONAL_RESOURCES` — cost if wrong: none.
+- Ruling, Task 8: the built-in illustration also calls `setFixedSize` so a fixed size left by a runtime theme cannot leak into the built-in layout — cost if wrong: cosmetic.
+- Verification: default and legacy (`INCLUDE_OPTIONAL_RESOURCES=ON CHARACTER_IS_RIGHT=ON`) builds succeed warning-free; 19/19 tests pass; offscreen startup smoke tests (runtime theme with parent/background/illustration, `__none__`, built-in, missing saved name) all stay running without a crash.
+- Remaining: final whole-branch self-review. The manual visual matrix (artwork, readability, anchoring on real screens) is not executable headless and stays with the user.

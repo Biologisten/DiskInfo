@@ -63,9 +63,11 @@ private:
     utils Utils;
     QButtonGroup *buttonGroup;
     QHBoxLayout *horizontalLayout;
+    QHBoxLayout *infoLayout;
     QVBoxLayout *verticalLayout;
     QGridLayout *gridLayout;
     QLabel *diskName, *temperatureValue, *healthStatusValue;
+    QLabel *temperatureLabelVertical, *healthStatusLabelVertical;
     QLabel *temperatureLabelHorizontal, *healthStatusLabelHorizontal, *temperatureValueHorizontal, *healthStatusValueHorizontal;
     QLineEdit *firmwareLineEdit, *serialNumberLineEdit, *typeLineEdit, *protocolLineEdit, *deviceNodeLineEdit;
     QLineEdit *totalReadsLineEdit, *totalWritesLineEdit, *rotationRateLineEdit, *powerOnCountLineEdit, *powerOnHoursLineEdit;
@@ -97,11 +99,11 @@ private:
     void addSCSIErrorCounterLogTable(const QJsonObject &scsiErrorCounterLog);
     void addNvmeLogTable(const QVector<QPair<QString, int>>& nvmeLogOrdered);
     void addSmartAttributesTable(const QJsonArray &attributes);
-    void transformWindow();
     void mousePressEvent(QMouseEvent*);
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     ThemeManager themeManager;
@@ -109,6 +111,7 @@ private:
     bool themedMode = false;
     bool themeLayoutActive = false;
     bool builtinThemeActive = false;
+    bool screenChangeConnected = false;
     QString currentThemeName;
 
     QTimer themeBackgroundTimer;
@@ -135,7 +138,10 @@ private:
     void openThemesFolder();
 
     void applyThemeVisuals(const Theme &theme);
+    void applyBuiltinTheme();
     void clearThemeVisuals();
+    void applyThemeLayout(bool enabled, bool characterRight);
+    void updateStatusIllustration(const QString &health);
     void updateThemeBackground();
     int themeZoomPercent() const;
     void applyThemeColors(const ThemeColors &colors);

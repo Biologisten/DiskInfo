@@ -13,8 +13,12 @@
 #include <QPainter>
 #include <QScreen>
 #include <QUrl>
+#include <QWindow>
 #include <QTextEdit>
 #include <QDialogButtonBox>
+
+#include <algorithm>
+#include <utility>
 
 const int PRECISION_TOTALS_TO_STR = 2;
 const int PRECISION_CAPACITY_TO_STR = 0;
@@ -53,6 +57,8 @@ MainWindow::MainWindow(QWidget *parent)
     healthStatusLabelHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("temperatureLabelHorizontal"));
     temperatureValueHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("temperatureValueLabelHorizontal"));
     healthStatusValueHorizontal = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("healthStatusValueLabelHorizontal"));
+    temperatureLabelVertical = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("temperatureLabel"));
+    healthStatusLabelVertical = qobject_cast<QLabel *>(ui->centralwidget->findChild<QLabel*>("healthStatusLabel"));
 
     firmwareLineEdit = qobject_cast<QLineEdit *>(ui->centralwidget->findChild<QLineEdit*>("firmwareLineEdit"));
     serialNumberLineEdit = qobject_cast<QLineEdit *>(ui->centralwidget->findChild<QLineEdit*>("serialNumberLineEdit"));
@@ -110,7 +116,7 @@ MainWindow::MainWindow(QWidget *parent)
     statusLabel = new QLabel(ui->centralwidget);
     statusLabel->hide();
 
-    QHBoxLayout *infoLayout = ui->centralwidget->findChild<QHBoxLayout*>("info");
+    infoLayout = ui->centralwidget->findChild<QHBoxLayout*>("info");
     if (infoLayout && infoLayout->count() > 1 && infoLayout->itemAt(1)) {
         infoSpacer = infoLayout->itemAt(1)->spacerItem();
     }
@@ -163,7 +169,24 @@ MainWindow::MainWindow(QWidget *parent)
     themeManager.reload();
     setupThemeMenu();
     const QString savedTheme = settings.value(QStringLiteral("Theme/Name")).toString();
-    setThemeSelection(savedTheme, false);
+    if (savedTheme.isEmpty()) {
+#if INCLUDE_OPTIONAL_RESOURCES
+        setThemeSelection(QStringLiteral("__builtin__"), false);
+#else
+        setThemeSelection(QStringLiteral("__none__"), false);
+#endif
+    } else if (savedTheme == QLatin1String("__builtin__")) {
+#if INCLUDE_OPTIONAL_RESOURCES
+        setThemeSelection(savedTheme, false);
+#else
+        setThemeSelection(QStringLiteral("__none__"), false);
+#endif
+    } else if (savedTheme != QLatin1String("__none__") && !themeManager.theme(savedTheme)) {
+        settings.remove(QStringLiteral("Theme/Name"));
+        setThemeSelection(QStringLiteral("__none__"), false);
+    } else {
+        setThemeSelection(savedTheme, false);
+    }
 
     mbSymbol = locale.formattedDataSize(1 << 20, 1, QLocale::DataSizeTraditionalFormat).split(' ')[1];
     gbSymbol = locale.formattedDataSize(1 << 30, 1, QLocale::DataSizeTraditionalFormat).split(' ')[1];
@@ -173,6 +196,24 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    if (infoSpacer && infoLayout && infoLayout->indexOf(infoSpacer) < 0) {
+        delete infoSpacer;
+    }
+    infoSpacer = nullptr;
+    if (gridLeftSpacer && gridLayout && gridLayout->indexOf(gridLeftSpacer) < 0) {
+        delete gridLeftSpacer;
+    }
+    gridLeftSpacer = nullptr;
+    for (const QPair<int, QSpacerItem *> &entry : std::as_const(verticalSpacers)) {
+        if (verticalLayout && verticalLayout->indexOf(entry.second) < 0) {
+            delete entry.second;
+        }
+    }
+    verticalSpacers.clear();
+    if (characterSpacer && gridLayout && gridLayout->indexOf(characterSpacer) < 0) {
+        delete characterSpacer;
+    }
+    characterSpacer = nullptr;
     delete ui;
 }
 
@@ -849,22 +890,7 @@ void MainWindow::populateWindow(const QJsonObject &localObj, const QString &heal
         healthStyle = "background-color: " + naColor.name() + ";";
     }
 
-    if (INCLUDE_OPTIONAL_RESOURCES) {
-        QPixmap statusAnimeBackground;
-        QSize labelSize(100, 30);
-        if (health == tr("Bad")) {
-            statusAnimeBackground = QPixmap(":/icons/bad.png");
-        } else if (health == tr("Caution")){
-            statusAnimeBackground = QPixmap(":/icons/caution.png");
-        } else if (health == tr("Good")) {
-            statusAnimeBackground = QPixmap(":/icons/good.png");
-        } else {
-            statusAnimeBackground = QPixmap(":/icons/unknown.png");
-        }
-        QPixmap statusAnimeBackgroundScaled = statusAnimeBackground.scaled(labelSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-        statusLabel->setPixmap(statusAnimeBackgroundScaled);
-        statusLabel->setToolTip(health);
-    }
+    updateStatusIllustration(health);
 
     QString percentageText = "";
     if (!percentage.isEmpty()) {
@@ -1272,54 +1298,6 @@ void MainWindow::addSmartAttributesTable(const QJsonArray &attributes)
     tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
 }
 
-void MainWindow::transformWindow() {
-    setMaximumSize(960, 960);
-    resize(960, 600);
-
-    QLayoutItem *item;
-    while ((item = verticalLayout->takeAt(0)) != nullptr) {
-        QWidget *widget = item->widget();
-        if (widget) {
-            delete widget;
-        }
-        delete item;
-    }
-
-    verticalLayout->addWidget(statusLabel);
-
-    if (CHARACTER_IS_RIGHT) {
-        QSpacerItem *spacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
-        gridLayout->addItem(spacer,3,3);
-        setMinimumWidth(645);
-    } else {
-        setMinimumWidth(960);
-    }
-
-    QHBoxLayout *infoLayout = ui->centralwidget->findChild<QHBoxLayout*>("info");
-    QSpacerItem *spacerItem = infoLayout->itemAt(1)->spacerItem();
-    if (spacerItem) {
-            infoLayout->removeItem(spacerItem);
-            delete spacerItem;
-    }
-
-    QPalette palette = QApplication::palette();
-    QColor backgroundColor = palette.color(QPalette::Window);
-    int lightness = backgroundColor.lightness();
-    bool darkTheme = lightness < 128;
-
-    QPixmap animeBackground;
-    if (darkTheme) {
-        animeBackground = QPixmap(":/icons/bg_dark.png");
-    } else {
-        animeBackground = QPixmap(":/icons/bg_light.png");
-    }
-
-    animeBackground = animeBackground.scaled(this->size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    palette.setBrush(QPalette::Window, QBrush(animeBackground));
-    ui->centralwidget->setPalette(palette);
-    ui->centralwidget->setAutoFillBackground(true);
-}
-
 void MainWindow::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::ForwardButton && nextButton->isEnabled()) {
@@ -1460,6 +1438,10 @@ void MainWindow::on_actionClear_Settings_triggered()
         ui->actionCyclic_Navigation->setChecked(false);
         ui->actionUse_GB_instead_of_TB->setChecked(false);
 
+        settings.setValue("Theme/Name", "__none__");
+        setThemeSelection(QStringLiteral("__none__"), false);
+        rebuildThemeMenu();
+
         if (!initializing) {
             updateUI(Utils.clearButtonGroup(buttonGroup, horizontalLayout, buttonStretch, menuDisk));
         }
@@ -1556,6 +1538,37 @@ void MainWindow::resizeEvent(QResizeEvent *event)
     }
 }
 
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    if (!screenChangeConnected && windowHandle()) {
+        screenChangeConnected = true;
+        connect(windowHandle(), &QWindow::screenChanged, this, [this](QScreen *) {
+            if (!themedMode) {
+                return;
+            }
+            if (!builtinThemeActive) {
+                const QString bgPath = currentTheme.backgroundPath(themeZoomPercent());
+                if (!bgPath.isEmpty()) {
+                    themeBackgroundSource = QPixmap(bgPath);
+                } else if (currentTheme.backgroundColor().isValid()) {
+                    QPixmap colorPixmap(1, 1);
+                    colorPixmap.fill(currentTheme.backgroundColor());
+                    themeBackgroundSource = colorPixmap;
+                } else {
+                    themeBackgroundSource = QPixmap();
+                }
+            }
+            updateThemeBackground();
+            updateStatusIllustration(globalHealth);
+        });
+    }
+    if (themedMode) {
+        updateThemeBackground();
+        updateStatusIllustration(globalHealth);
+    }
+}
+
 void MainWindow::setupThemeMenu()
 {
     themeMenu = ui->menuSettings->addMenu(tr("Theme"));
@@ -1585,6 +1598,16 @@ void MainWindow::rebuildThemeMenu()
     connect(defaultAction, &QAction::triggered, this, [this]() {
         setThemeSelection(QStringLiteral("__none__"), true);
     });
+
+#if INCLUDE_OPTIONAL_RESOURCES
+    QAction *builtinAction = themeMenu->addAction(tr("Built-in (compile-time)"));
+    builtinAction->setCheckable(true);
+    builtinAction->setData(QStringLiteral("__builtin__"));
+    themeActionGroup->addAction(builtinAction);
+    connect(builtinAction, &QAction::triggered, this, [this]() {
+        setThemeSelection(QStringLiteral("__builtin__"), true);
+    });
+#endif
 
     const QStringList names = themeManager.themeNames();
     for (const QString &tName : names) {
@@ -1618,6 +1641,14 @@ void MainWindow::setThemeSelection(const QString &name, bool persist)
     if (name.isEmpty() || name == QLatin1String("__none__")) {
         clearThemeVisuals();
         currentThemeName = QStringLiteral("__none__");
+    } else if (name == QLatin1String("__builtin__")) {
+#if INCLUDE_OPTIONAL_RESOURCES
+        applyBuiltinTheme();
+        currentThemeName = QStringLiteral("__builtin__");
+#else
+        clearThemeVisuals();
+        currentThemeName = QStringLiteral("__none__");
+#endif
     } else {
         const Theme *t = themeManager.theme(name);
         if (t && t->isValid()) {
@@ -1728,6 +1759,8 @@ void MainWindow::applyThemeVisuals(const Theme &theme)
     themedMode = true;
     builtinThemeActive = false;
 
+    applyThemeLayout(true, theme.characterPosition() == 1);
+
     const QString bgPath = theme.backgroundPath(themeZoomPercent());
     if (!bgPath.isEmpty()) {
         themeBackgroundSource = QPixmap(bgPath);
@@ -1749,12 +1782,40 @@ void MainWindow::applyThemeVisuals(const Theme &theme)
     refreshCurrentDevice();
 }
 
+void MainWindow::applyBuiltinTheme()
+{
+#if INCLUDE_OPTIONAL_RESOURCES
+    applyThemeLayout(true, CHARACTER_IS_RIGHT != 0);
+    themedMode = true;
+    builtinThemeActive = true;
+
+    const QColor backgroundColor = QApplication::palette().color(QPalette::Window);
+    const bool darkTheme = backgroundColor.lightness() < 128;
+    themeBackgroundSource = QPixmap(darkTheme ? QStringLiteral(":/icons/bg_dark.png")
+                                              : QStringLiteral(":/icons/bg_light.png"));
+
+    restoreDefaultColors();
+
+    setMaximumSize(960, 960);
+    resize(960, 600);
+
+    updateThemeBackground();
+    updateStatusIllustration(globalHealth);
+    refreshCurrentDevice();
+#else
+    clearThemeVisuals();
+    currentThemeName = QStringLiteral("__none__");
+#endif
+}
+
 void MainWindow::clearThemeVisuals()
 {
     themedMode = false;
     builtinThemeActive = false;
     themeBackgroundSource = QPixmap();
     themeBackgroundTimer.stop();
+
+    applyThemeLayout(false, false);
 
     restoreDefaultColors();
     ui->centralwidget->setPalette(defaultCentralPalette);
@@ -1766,7 +1827,7 @@ void MainWindow::applyThemeColors(const ThemeColors &colors)
 {
     QWidget *cw = ui->centralwidget;
 
-    QPalette centralPal = cw->palette();
+    QPalette centralPal = defaultCentralPalette;
     centralPal.setColor(QPalette::WindowText, colors.labelText);
     centralPal.setColor(QPalette::Text, colors.labelText);
     centralPal.setColor(QPalette::ButtonText, colors.buttonText);
@@ -1783,7 +1844,7 @@ void MainWindow::applyThemeColors(const ThemeColors &colors)
     const double lum = 0.299 * colors.glass.red() + 0.587 * colors.glass.green() + 0.114 * colors.glass.blue();
     const QColor highlightedText = (lum > 128.0) ? QColor(Qt::black) : QColor(Qt::white);
 
-    QPalette tablePal = tableWidget->palette();
+    QPalette tablePal = defaultTablePalette;
     tablePal.setColor(QPalette::Base, base1);
     tablePal.setColor(QPalette::AlternateBase, base2);
     tablePal.setColor(QPalette::Text, colors.listText1);
@@ -1835,7 +1896,9 @@ void MainWindow::updateThemeBackground()
 
     {
         QPainter painter(&canvas);
-        const bool characterRight = (currentTheme.characterPosition() == 1);
+        const bool characterRight = builtinThemeActive
+            ? (CHARACTER_IS_RIGHT != 0)
+            : (currentTheme.characterPosition() == 1);
         const int x = characterRight ? (targetPx.width() - scaled.width()) : 0;
         const int y = 0;
         painter.drawPixmap(x, y, scaled);
@@ -1867,12 +1930,222 @@ void MainWindow::initializeDefaultThemeState()
     if (temperatureValueHorizontal) temperatureValueHorizontal->hide();
     if (healthStatusValueHorizontal) healthStatusValueHorizontal->hide();
 
+    if (temperatureLabelVertical) temperatureLabelVertical->show();
+    if (healthStatusLabelVertical) healthStatusLabelVertical->show();
     if (temperatureValue) temperatureValue->show();
     if (healthStatusValue) healthStatusValue->show();
+
+    if (statusLabel) statusLabel->hide();
 
     if (gridLeftSpacer && gridLayout) {
         gridLayout->removeItem(gridLeftSpacer);
     }
+}
+
+void MainWindow::applyThemeLayout(bool enabled, bool characterRight)
+{
+    if (enabled == themeLayoutActive) {
+        if (!enabled) {
+            return;
+        }
+        if (characterRight) {
+            if (gridLeftSpacer && gridLayout && gridLayout->indexOf(gridLeftSpacer) >= 0) {
+                gridLayout->removeItem(gridLeftSpacer);
+            }
+            if (!characterSpacer && gridLayout) {
+                characterSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+                gridLayout->addItem(characterSpacer, 3, 3);
+            }
+            setMinimumWidth(645);
+        } else {
+            if (characterSpacer && gridLayout) {
+                gridLayout->removeItem(characterSpacer);
+                delete characterSpacer;
+                characterSpacer = nullptr;
+            }
+            if (gridLeftSpacer && gridLayout && gridLayout->indexOf(gridLeftSpacer) < 0) {
+                gridLayout->addItem(gridLeftSpacer, 2, 0);
+            }
+            setMinimumWidth(960);
+        }
+        setMaximumSize(defaultMaximumSize);
+        return;
+    }
+
+    if (enabled) {
+        if (healthStatusLabelVertical) healthStatusLabelVertical->hide();
+        if (temperatureLabelVertical) temperatureLabelVertical->hide();
+        if (healthStatusValue) healthStatusValue->hide();
+        if (temperatureValue) temperatureValue->hide();
+
+        if (verticalLayout) {
+            for (const QPair<int, QSpacerItem *> &entry : std::as_const(verticalSpacers)) {
+                if (verticalLayout->indexOf(entry.second) >= 0) {
+                    verticalLayout->removeItem(entry.second);
+                }
+            }
+            if (statusLabel && verticalLayout->indexOf(statusLabel) < 0) {
+                verticalLayout->addWidget(statusLabel);
+            }
+        }
+        if (statusLabel) {
+            statusLabel->show();
+        }
+
+        if (temperatureLabelHorizontal) temperatureLabelHorizontal->show();
+        if (healthStatusLabelHorizontal) healthStatusLabelHorizontal->show();
+        if (temperatureValueHorizontal) temperatureValueHorizontal->show();
+        if (healthStatusValueHorizontal) healthStatusValueHorizontal->show();
+
+        if (infoSpacer && infoLayout && infoLayout->indexOf(infoSpacer) >= 0) {
+            infoLayout->removeItem(infoSpacer);
+        }
+
+        if (characterRight) {
+            if (gridLeftSpacer && gridLayout && gridLayout->indexOf(gridLeftSpacer) >= 0) {
+                gridLayout->removeItem(gridLeftSpacer);
+            }
+            if (!characterSpacer && gridLayout) {
+                characterSpacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+                gridLayout->addItem(characterSpacer, 3, 3);
+            }
+            setMinimumWidth(645);
+        } else {
+            if (characterSpacer && gridLayout) {
+                gridLayout->removeItem(characterSpacer);
+                delete characterSpacer;
+                characterSpacer = nullptr;
+            }
+            if (gridLeftSpacer && gridLayout && gridLayout->indexOf(gridLeftSpacer) < 0) {
+                gridLayout->addItem(gridLeftSpacer, 2, 0);
+            }
+            setMinimumWidth(960);
+        }
+
+        setMaximumSize(defaultMaximumSize);
+        if (width() < 960 || height() < 600) {
+            resize(qMax(width(), 960), qMax(height(), 600));
+        }
+    } else {
+        if (verticalLayout && statusLabel && verticalLayout->indexOf(statusLabel) >= 0) {
+            verticalLayout->removeWidget(statusLabel);
+        }
+        if (statusLabel) {
+            statusLabel->hide();
+        }
+
+        if (healthStatusLabelVertical) healthStatusLabelVertical->show();
+        if (temperatureLabelVertical) temperatureLabelVertical->show();
+        if (healthStatusValue) healthStatusValue->show();
+        if (temperatureValue) temperatureValue->show();
+
+        if (verticalLayout) {
+            QVector<QPair<int, QSpacerItem *>> spacers = verticalSpacers;
+            std::sort(spacers.begin(), spacers.end(),
+                      [](const QPair<int, QSpacerItem *> &a, const QPair<int, QSpacerItem *> &b) {
+                          return a.first < b.first;
+                      });
+            for (const QPair<int, QSpacerItem *> &entry : std::as_const(spacers)) {
+                if (verticalLayout->indexOf(entry.second) < 0) {
+                    verticalLayout->insertSpacerItem(entry.first, entry.second);
+                }
+            }
+        }
+
+        if (temperatureLabelHorizontal) temperatureLabelHorizontal->hide();
+        if (healthStatusLabelHorizontal) healthStatusLabelHorizontal->hide();
+        if (temperatureValueHorizontal) temperatureValueHorizontal->hide();
+        if (healthStatusValueHorizontal) healthStatusValueHorizontal->hide();
+
+        if (infoSpacer && infoLayout && infoLayout->indexOf(infoSpacer) < 0) {
+            infoLayout->insertSpacerItem(1, infoSpacer);
+        }
+
+        if (characterSpacer && gridLayout) {
+            gridLayout->removeItem(characterSpacer);
+            delete characterSpacer;
+            characterSpacer = nullptr;
+        }
+        if (gridLeftSpacer && gridLayout && gridLayout->indexOf(gridLeftSpacer) >= 0) {
+            gridLayout->removeItem(gridLeftSpacer);
+        }
+
+        setMinimumWidth(defaultMinimumWidth);
+        setMaximumSize(defaultMaximumSize);
+    }
+    themeLayoutActive = enabled;
+}
+
+void MainWindow::updateStatusIllustration(const QString &health)
+{
+    if (!statusLabel) {
+        return;
+    }
+    if (!themeLayoutActive) {
+        statusLabel->hide();
+        return;
+    }
+
+    if (builtinThemeActive) {
+        QPixmap pixmap;
+        if (health == tr("Bad")) {
+            pixmap = QPixmap(":/icons/bad.png");
+        } else if (health == tr("Caution")) {
+            pixmap = QPixmap(":/icons/caution.png");
+        } else if (health == tr("Good")) {
+            pixmap = QPixmap(":/icons/good.png");
+        } else {
+            pixmap = QPixmap(":/icons/unknown.png");
+        }
+        const QPixmap scaled = pixmap.scaled(QSize(100, 30), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+        statusLabel->setPixmap(scaled);
+        statusLabel->setFixedSize(scaled.size() / scaled.devicePixelRatio());
+        statusLabel->setToolTip(health);
+        statusLabel->show();
+        return;
+    }
+
+    QString baseName;
+    QString fallbackName;
+    if (health == tr("Bad")) {
+        baseName = QStringLiteral("diskBad");
+        fallbackName = QStringLiteral("diskStatusBad");
+    } else if (health == tr("Caution")) {
+        baseName = QStringLiteral("diskCaution");
+        fallbackName = QStringLiteral("diskStatusCaution");
+    } else if (health == tr("Good")) {
+        baseName = QStringLiteral("diskGood");
+        fallbackName = QStringLiteral("diskStatusGood");
+    } else {
+        baseName = QStringLiteral("diskUnknown");
+        fallbackName = QStringLiteral("diskStatusUnknown");
+    }
+
+    const int zoom = themeZoomPercent();
+    QString path = currentTheme.assetPath(baseName, zoom);
+    if (path.isEmpty()) {
+        path = currentTheme.assetPath(fallbackName, zoom);
+    }
+    if (path.isEmpty()) {
+        statusLabel->hide();
+        return;
+    }
+
+    QPixmap pixmap(path);
+    if (pixmap.isNull()) {
+        statusLabel->hide();
+        return;
+    }
+
+    static const QRegularExpression suffixRe(QStringLiteral("-(\\d+)\\.png$"));
+    const QRegularExpressionMatch match = suffixRe.match(path);
+    if (match.hasMatch()) {
+        pixmap.setDevicePixelRatio(match.captured(1).toInt() / 100.0);
+    }
+    statusLabel->setPixmap(pixmap);
+    statusLabel->setFixedSize(pixmap.size() / pixmap.devicePixelRatio());
+    statusLabel->setToolTip(health);
+    statusLabel->show();
 }
 
 void MainWindow::refreshCurrentDevice()

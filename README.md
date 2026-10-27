@@ -77,10 +77,15 @@ For Qt >=6.7 this is done automatically when running `make`.
 If you are using QDiskInfo outside KDE, the arrows on the navigation keys and some other icons may be missing. To fix this install the Qt6 Configuration Tool (qt6ct) and append `export QT_QPA_PLATFORMTHEME=qt6ct` to the file `/etc/environment`
 
 ## Using CrystalDiskInfo Anime Themes
-The process is similar to the one above with a few changes:<br>
-First you must download the edition of CrystalDiskInfo you want (Aoi for example) in ZIP format from [here](https://crystalmark.info/en/download/), from this archive you shall copy the light and dark backgrounds as well as the good, caution, bad, unknown icons to dist/theme with the same name as the templates there.<br>
-Once you do that compile like above but when running CMake do this instead:
+You can use the CrystalDiskInfo editions as runtime themes, without rebuilding QDiskInfo:<br>
+1. Download the edition of CrystalDiskInfo you want (Aoi for example) in ZIP format from [here](https://crystalmark.info/en/download/).<br>
+2. In QDiskInfo open `Settings > Theme > Import Themes from CDI ZIP...` and select the ZIP. Every theme in the archive is installed under `~/.local/share/qdiskinfo/themes` (`Open Themes Folder` from the same menu takes you there).<br>
+3. Switch between the installed themes and `Default (No Theme)` at any time from the Theme menu; the selection is remembered across restarts.
+
+The old compile-time mode is still available as a fallback: copy the light and dark backgrounds as well as the good, caution, bad and unknown icons into dist/theme (with the same names as the templates there) and compile like above, but when running CMake do this instead:
 ```sh
 cmake .. -DCMAKE_BUILD_TYPE:STRING=MinSizeRel -DQT_VERSION_MAJOR=6 -DINCLUDE_OPTIONAL_RESOURCES=ON -DCHARACTER_IS_RIGHT=ON -DENABLE_TRANSLATIONS=ON
 ```
-Regarding the `-DCHARACTER_IS_RIGHT` set it to ON for themes where the character is right (like Aoi) or OFF for most other themes.
+Regarding the `-DCHARACTER_IS_RIGHT` set it to ON for themes where the character is right (like Aoi) or OFF for most other themes. The compiled theme appears in the Theme menu as `Built-in (compile-time)`.
+
+QDiskInfo does not bundle or redistribute any theme artwork; the artwork remains the property of its authors.
