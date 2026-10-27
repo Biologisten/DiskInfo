@@ -23,6 +23,21 @@
 const int PRECISION_TOTALS_TO_STR = 2;
 const int PRECISION_CAPACITY_TO_STR = 0;
 
+namespace {
+
+// The navigation buttons take their icons from the platform icon theme; when
+// that theme is missing or lacks the arrows (common outside KDE), the buttons
+// render empty, so use the plain arrow glyphs instead.
+void applyArrowFallback(QPushButton *button, const QString &glyph)
+{
+    if (button->icon().pixmap(16, 16).isNull()) {
+        button->setIcon(QIcon());
+        button->setText(glyph);
+    }
+}
+
+}
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -84,6 +99,9 @@ MainWindow::MainWindow(QWidget *parent)
     prevButton = ui->centralwidget->findChild<QPushButton*>("previousButton");
     nextButton->setShortcut(QKeySequence::Forward);
     prevButton->setShortcut(QKeySequence::Back);
+
+    applyArrowFallback(prevButton, QStringLiteral("<"));
+    applyArrowFallback(nextButton, QStringLiteral(">"));
 
     connect(nextButton, &QPushButton::clicked, this, &MainWindow::onNextButtonClicked);
     connect(prevButton, &QPushButton::clicked, this, &MainWindow::onPrevButtonClicked);
