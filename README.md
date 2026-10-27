@@ -4,6 +4,14 @@ DiskInfo is a personal, unofficial fork of [QDiskInfo](https://github.com/edisio
 
 This repository is not affiliated with the upstream maintainer. All original work remains copyright its authors; see [Credits and License](#credits-and-license).
 
+## Screenshots
+
+| Default | CrystalDiskInfo theme |
+|:---:|:---:|
+| ![Default appearance](docs/screenshots/default.png) | ![Aoi Night theme](docs/screenshots/aoi-night.png) |
+
+The right-hand window uses the Aoi Night theme from CrystalDiskInfo, imported at runtime. Theme artwork remains the property of its authors.
+
 ## What this fork adds
 
 - **Runtime CrystalDiskInfo themes.** Import a CDI ZIP and switch skins from `Settings > Theme` — no rebuild, and the selection is remembered across restarts.
@@ -11,6 +19,8 @@ This repository is not affiliated with the upstream maintainer. All original wor
 - **Runtime-only theming.** The old compile-time theme mode (`INCLUDE_OPTIONAL_RESOURCES` / `CHARACTER_IS_RIGHT`) has been removed.
 - **Regression tests.** Theme parsing, ZIP import, icon fallbacks and the themed window are covered by CTest, and the suites run in GitHub Actions on every push.
 - **No disk artwork in themed windows.** CDI `disk*` assets are multi-row disk-list strips rather than a single illustration, so the left status slot stays hidden and the disk selectors keep their default look.
+
+See [CHANGELOG.md](CHANGELOG.md) for the detailed list of changes from upstream.
 
 ## Packaging and releases
 
