@@ -1743,6 +1743,9 @@ void MainWindow::importThemesFromZip()
     if (!result.failed.isEmpty()) {
         summary += tr("\nFailed: %1 themes.").arg(result.failed.size());
     }
+    if (!result.duplicates.isEmpty()) {
+        summary += tr("\nDuplicate theme folders ignored: %1").arg(result.duplicates.join(QStringLiteral(", ")));
+    }
     QMessageBox::information(this, tr("Import Complete"), summary);
 }
 

@@ -159,6 +159,28 @@ private slots:
         QCOMPARE(theme.colors().glassAlpha, 99);
     }
 
+    void parsesBareHexDecimalAndRejectsInvalid()
+    {
+        QTemporaryDir tmp;
+        const QString dir = tmp.filePath("Values");
+        writeFile(dir + "/theme.ini",
+            "[COLOR];RGB\n"
+            "LabelText=112233;\n"
+            "ButtonText=66051;\n"
+            "ListText1=0xFFFFFFF;\n"
+            "Glass=zzz;\n"
+            "[ALPHA]#comment\n"
+            "GlassAlpha=300;\n");
+
+        const Theme theme = Theme::parse(dir);
+        QVERIFY(theme.isValid());
+        QCOMPARE(theme.colors().labelText, QColor(0x11, 0x22, 0x33));
+        QCOMPARE(theme.colors().buttonText, QColor(0x01, 0x02, 0x03));
+        QCOMPARE(theme.colors().listText1, QColor(Qt::black));
+        QCOMPARE(theme.colors().glass, QColor(Qt::white));
+        QCOMPARE(theme.colors().glassAlpha, 128);
+    }
+
     void inheritsMissingColoursParentFirst()
     {
         QTemporaryDir tmp;
@@ -396,6 +418,51 @@ private slots:
         const ThemeZipInfo info = manager.inspectZip(zipPath);
         QVERIFY(!info.ok());
         QVERIFY(info.error.contains("No CDI themes"));
+    }
+
+    void reportsDuplicateThemeFolders()
+    {
+        QTemporaryDir tmp;
+        const QString writable = tmp.filePath("themes");
+        const QString zipPath = tmp.filePath("duplicates.zip");
+        QVERIFY(writeZip(zipPath, {
+            {"CdiResource/themes/Aoi/theme.ini", QByteArray("[Info]\nAuthor=first\n")},
+            {"CdiResource/themes/Aoi/diskGood-300.png", QByteArray("first")},
+            {"backup/Aoi/theme.ini", QByteArray("[Info]\nAuthor=second\n")},
+            {"backup/Aoi/diskGood-300.png", QByteArray("second")},
+        }));
+        ThemeManager manager(QStringList{}, writable);
+
+        const ThemeZipInfo info = manager.inspectZip(zipPath);
+        QVERIFY2(info.ok(), qPrintable(info.error));
+        QCOMPARE(info.names, QStringList({"Aoi"}));
+        QCOMPARE(info.duplicates, QStringList({"backup/Aoi"}));
+
+        const ThemeImportResult result = manager.importZip(zipPath, false);
+        QVERIFY2(result.ok(), qPrintable(result.error));
+        QCOMPARE(result.imported, QStringList({"Aoi"}));
+        QCOMPARE(result.duplicates, QStringList({"backup/Aoi"}));
+        QCOMPARE(readFile(writable + "/Aoi/theme.ini"), QByteArray("[Info]\nAuthor=first\n"));
+        QVERIFY(!QFileInfo::exists(writable + "/backup"));
+    }
+
+    void rejectsArchivesOverEntryLimit()
+    {
+        QTemporaryDir tmp;
+        const QString zipPath = tmp.filePath("many.zip");
+        QList<QPair<QString, QByteArray>> files;
+        for (int i = 0; i < 5001; ++i) {
+            files.append({QStringLiteral("CdiResource/themes/T%1/theme.ini").arg(i), QByteArray("[Info]\n")});
+        }
+        QVERIFY(writeZip(zipPath, files));
+
+        ThemeManager manager(QStringList{}, tmp.filePath("themes"));
+        const ThemeZipInfo info = manager.inspectZip(zipPath);
+        QVERIFY(!info.ok());
+        QVERIFY(info.error.contains("too many entries"));
+
+        const ThemeImportResult result = manager.importZip(zipPath, false);
+        QVERIFY(!result.ok());
     }
 
     void rejectsTraversalEntries()

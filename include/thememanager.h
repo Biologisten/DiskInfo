@@ -10,6 +10,7 @@
 struct ThemeZipInfo {
     QStringList names;
     QStringList existing;
+    QStringList duplicates;
     QString error;
     bool ok() const { return error.isEmpty(); }
 };
@@ -18,6 +19,7 @@ struct ThemeImportResult {
     QStringList imported;
     QStringList skipped;
     QStringList failed;
+    QStringList duplicates;
     QString error;
     bool ok() const { return error.isEmpty(); }
 };

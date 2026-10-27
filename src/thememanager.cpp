@@ -52,7 +52,8 @@ QString themeNameForRoot(const QString &rootDir, const QString &zipPath)
     return QFileInfo(rootDir).fileName();
 }
 
-QHash<QString, QString> themeRootsFromEntries(const QVector<ZipEntry> &entries, const QString &zipPath)
+QHash<QString, QString> themeRootsFromEntries(const QVector<ZipEntry> &entries, const QString &zipPath,
+                                              QStringList *duplicates = nullptr)
 {
     QHash<QString, QString> roots;
     for (const ZipEntry &entry : entries) {
@@ -67,9 +68,16 @@ QHash<QString, QString> themeRootsFromEntries(const QVector<ZipEntry> &entries, 
         if (!isValidThemeName(name)) {
             continue;
         }
-        if (!roots.contains(name)) {
-            roots.insert(name, rootDir);
+        if (roots.contains(name)) {
+            if (duplicates) {
+                const QString location = rootDir.isEmpty() ? QFileInfo(zipPath).fileName() : rootDir;
+                if (!duplicates->contains(location)) {
+                    duplicates->append(location);
+                }
+            }
+            continue;
         }
+        roots.insert(name, rootDir);
     }
     return roots;
 }
@@ -185,7 +193,7 @@ ThemeZipInfo ThemeManager::inspectZip(const QString &zipPath) const
         return info;
     }
 
-    const QHash<QString, QString> roots = themeRootsFromEntries(entries, zipPath);
+    const QHash<QString, QString> roots = themeRootsFromEntries(entries, zipPath, &info.duplicates);
     info.names = roots.keys();
     sortThemeNames(info.names);
 
@@ -223,7 +231,7 @@ ThemeImportResult ThemeManager::importZip(const QString &zipPath, bool overwrite
         return result;
     }
 
-    const QHash<QString, QString> roots = themeRootsFromEntries(entries, zipPath);
+    const QHash<QString, QString> roots = themeRootsFromEntries(entries, zipPath, &result.duplicates);
 
     struct ThemeExtraction {
         QString name;
