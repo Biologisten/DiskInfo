@@ -82,10 +82,4 @@ You can use the CrystalDiskInfo editions as runtime themes, without rebuilding Q
 2. In QDiskInfo open `Settings > Theme > Import Themes from CDI ZIP...` and select the ZIP. Every theme in the archive is installed under `~/.local/share/qdiskinfo/themes` (`Open Themes Folder` from the same menu takes you there).<br>
 3. Switch between the installed themes and `Default (No Theme)` at any time from the Theme menu; the selection is remembered across restarts.
 
-The old compile-time mode is still available as a fallback: copy the light and dark backgrounds as well as the good, caution, bad and unknown icons into dist/theme (with the same names as the templates there) and compile like above, but when running CMake do this instead:
-```sh
-cmake .. -DCMAKE_BUILD_TYPE:STRING=MinSizeRel -DQT_VERSION_MAJOR=6 -DINCLUDE_OPTIONAL_RESOURCES=ON -DCHARACTER_IS_RIGHT=ON -DENABLE_TRANSLATIONS=ON
-```
-Regarding the `-DCHARACTER_IS_RIGHT` set it to ON for themes where the character is right (like Aoi) or OFF for most other themes. The compiled theme appears in the Theme menu as `Built-in (compile-time)`.
-
 QDiskInfo does not bundle or redistribute any theme artwork; the artwork remains the property of its authors.

@@ -35,14 +35,14 @@ ZIP from inside QDiskInfo, without manually extracting it.
    to the character side and top, and redraw on resize and DPR changes.
 6. Apply theme colours to labels, fields, buttons, table rows, table headers,
    grid lines and selection, with glass translucency.
-7. Leave the left status slot to the compile-time theme's health illustration;
-   runtime themes draw no disk artwork.
-8. Add `Settings > Theme`: Default, Built-in (compile-time builds only), each
-   discovered theme, Import Themes from CDI ZIP…, and Open Themes Folder.
+7. Leave the left status slot empty; runtime themes draw no disk artwork.
+8. Add `Settings > Theme`: Default, each discovered theme, Import Themes from
+   CDI ZIP…, and Open Themes Folder.
 9. Persist the selection in the existing `[Theme] Name` key.
 10. Import every theme from a CDI ZIP with one action, safely and atomically.
 11. Leave the default/no-theme UI equivalent in appearance to current upstream.
-12. Keep the existing compile-time theme mode as a "Built-in" fallback.
+12. Drop the compile-time theme mode entirely; runtime themes are the only
+    theming path.
 13. Keep the patch modular: new Theme/ThemeManager classes, a vendored ZIP
     reader, and thin MainWindow hooks.
 
@@ -88,16 +88,12 @@ ZIP from inside QDiskInfo, without manually extracting it.
   "qdiskinfo")` name and the documented `~/.local/share/qdiskinfo/themes` path.
 - Startup precedence:
   1. saved runtime theme name;
-  2. legacy compiled theme, only if `INCLUDE_OPTIONAL_RESOURCES=ON` and no saved
-     selection exists;
-  3. default/no theme.
+  2. default/no theme.
 - Sentinels in `[Theme] Name`:
   - `__none__` — Default (No Theme).
-  - `__builtin__` — compiled-in theme.
   - any other value — runtime theme directory name.
 - If a saved theme disappears, startup falls back to Default and clears the key.
-- Selecting Default writes `__none__`, so the choice survives restarts even in a
-  build with compiled-in resources.
+- Selecting Default writes `__none__`, so the choice survives restarts.
 - `Clear Settings` resets the theme selection to Default and restores the
   default UI immediately.
 
@@ -169,12 +165,11 @@ ZIP from inside QDiskInfo, without manually extracting it.
 - Health and temperature pills keep their semantic green/yellow/red/grey
   backgrounds. Their HTML text uses `ButtonText`.
 - Table status dots keep their semantic green/yellow/red/grey colours.
-- Drive illustration: none. Runtime themes leave the left status slot hidden.
-  CDI's `disk*` assets (`diskGood`, `diskCaution`, `diskBad`, `diskUnknown` and
-  their `Mini`/`diskStatus*` variants) are multi-row strips of disk-list cards
-  rather than a single illustration, so they are not drawn and the disk
-  selectors keep their default look. The built-in (compile-time) theme keeps
-  its health illustration in that slot.
+- Drive illustration: none. The left status slot stays hidden. CDI's `disk*`
+  assets (`diskGood`, `diskCaution`, `diskBad`, `diskUnknown` and their
+  `Mini`/`diskStatus*` variants) are multi-row strips of disk-list cards rather
+  than a single illustration, so they are not drawn and the disk selectors keep
+  their default look.
 - Menus and dialogs stay native.
 - All theme styling is applied to the central widget only and removed when the
   theme is cleared.
@@ -187,8 +182,6 @@ switching impossible. It is replaced by non-destructive handling:
 - Both the vertical and horizontal health/temperature label sets stay alive and
   are kept up to date; one set is hidden depending on the mode.
 - The vertical spacer is removed while themed and restored afterwards.
-- `statusLabel` is added to the vertical layout while themed and removed when
-  cleared.
 - `horizontalSpacer_3` (inside the `info` layout) is removed and reinserted; it
   is not deleted.
 - `horizontalSpacer_4` (grid row 2, column 0) is removed by default, matching
@@ -197,8 +190,7 @@ switching impossible. It is replaced by non-destructive handling:
   right, and removed otherwise.
 - Minimum width follows the existing rules: 645 for a right-side character, 960
   for a left-side character.
-- Runtime themes do not impose the old 960×960 maximum. The legacy compiled
-  theme keeps its old 960×960 maximum and 960×600 resize.
+- Runtime themes do not impose the old 960×960 maximum.
 - First activation of a runtime theme grows the window to at least 960×600.
 - Switching to Default restores the upstream layout, palette and sizing rules
   without a restart.
@@ -208,7 +200,6 @@ switching impossible. It is replaced by non-destructive handling:
 `Settings > Theme`:
 
 - `Default (No Theme)` — checkable.
-- `Built-in (compile-time)` — only when `INCLUDE_OPTIONAL_RESOURCES=ON`.
 - One checkable action per discovered theme, sorted case-insensitively.
 - Separator.
 - `Import Themes from CDI ZIP…`.
@@ -250,7 +241,6 @@ The menu rebuilds on `aboutToShow` and after import.
 
 - `[Theme] Name` stores the selection:
   - `__none__`;
-  - `__builtin__`;
   - a theme directory name.
 - `Clear Settings` resets the theme to `__none__` and applies Default
   immediately, alongside the existing settings resets.
@@ -293,8 +283,7 @@ The menu rebuilds on `aboutToShow` and after import.
 
 ### Manual
 
-- Build with default flags and with legacy `INCLUDE_OPTIONAL_RESOURCES` /
-  `CHARACTER_IS_RIGHT` flags.
+- Build with default flags.
 - Aoi, AoiNight, AoiDark and AoiLight: artwork visible, text readable, glass
   panels translucent, correct character side, no disk artwork in the info
   column.

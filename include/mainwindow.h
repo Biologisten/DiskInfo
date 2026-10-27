@@ -74,7 +74,6 @@ private:
     QTableWidget *tableWidget;
     QPushButton *prevButton, *nextButton;
     QColor goodColor, cautionColor, badColor, naColor;
-    QLabel *statusLabel;
     QJsonObject deviceJson;
     QSpacerItem *buttonStretch;
     QAction *actionCyclic_Navigation;
@@ -111,7 +110,6 @@ private:
     Theme currentTheme;
     bool themedMode = false;
     bool themeLayoutActive = false;
-    bool builtinThemeActive = false;
     bool screenChangeConnected = false;
     QString currentThemeName;
 
@@ -139,10 +137,8 @@ private:
     void openThemesFolder();
 
     void applyThemeVisuals(const Theme &theme);
-    void applyBuiltinTheme();
     void clearThemeVisuals();
     void applyThemeLayout(bool enabled, bool characterRight);
-    void updateStatusIllustration(const QString &health);
     void updateThemeBackground();
     int themeZoomPercent() const;
     void applyThemeColors(const ThemeColors &colors);

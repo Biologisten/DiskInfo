@@ -114,9 +114,6 @@ MainWindow::MainWindow(QWidget *parent)
     badColor = QColor(Qt::red);
     naColor = QColor(Qt::gray);
 
-    statusLabel = new QLabel(ui->centralwidget);
-    statusLabel->hide();
-
     infoLayout = ui->centralwidget->findChild<QHBoxLayout*>("info");
     if (infoLayout && infoLayout->count() > 1 && infoLayout->itemAt(1)) {
         infoSpacer = infoLayout->itemAt(1)->spacerItem();
@@ -172,17 +169,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupThemeMenu();
     const QString savedTheme = settings.value(QStringLiteral("Theme/Name")).toString();
     if (savedTheme.isEmpty()) {
-#if INCLUDE_OPTIONAL_RESOURCES
-        setThemeSelection(QStringLiteral("__builtin__"), false);
-#else
         setThemeSelection(QStringLiteral("__none__"), false);
-#endif
-    } else if (savedTheme == QLatin1String("__builtin__")) {
-#if INCLUDE_OPTIONAL_RESOURCES
-        setThemeSelection(savedTheme, false);
-#else
-        setThemeSelection(QStringLiteral("__none__"), false);
-#endif
     } else if (savedTheme != QLatin1String("__none__") && !themeManager.theme(savedTheme)) {
         settings.remove(QStringLiteral("Theme/Name"));
         setThemeSelection(QStringLiteral("__none__"), false);
@@ -894,8 +881,6 @@ void MainWindow::populateWindow(const QJsonObject &localObj, const QString &heal
         healthStyle = "background-color: " + naColor.name() + ";";
     }
 
-    updateStatusIllustration(health);
-
     QString percentageText = "";
     if (!percentage.isEmpty()) {
         if (themeLayoutActive) {
@@ -1551,25 +1536,21 @@ void MainWindow::showEvent(QShowEvent *event)
             if (!themedMode) {
                 return;
             }
-            if (!builtinThemeActive) {
-                const QString bgPath = currentTheme.backgroundPath(themeZoomPercent());
-                if (!bgPath.isEmpty()) {
-                    themeBackgroundSource = QPixmap(bgPath);
-                } else if (currentTheme.backgroundColor().isValid()) {
-                    QPixmap colorPixmap(1, 1);
-                    colorPixmap.fill(currentTheme.backgroundColor());
-                    themeBackgroundSource = colorPixmap;
-                } else {
-                    themeBackgroundSource = QPixmap();
-                }
+            const QString bgPath = currentTheme.backgroundPath(themeZoomPercent());
+            if (!bgPath.isEmpty()) {
+                themeBackgroundSource = QPixmap(bgPath);
+            } else if (currentTheme.backgroundColor().isValid()) {
+                QPixmap colorPixmap(1, 1);
+                colorPixmap.fill(currentTheme.backgroundColor());
+                themeBackgroundSource = colorPixmap;
+            } else {
+                themeBackgroundSource = QPixmap();
             }
             updateThemeBackground();
-            updateStatusIllustration(globalHealth);
         });
     }
     if (themedMode) {
         updateThemeBackground();
-        updateStatusIllustration(globalHealth);
     }
 }
 
@@ -1603,16 +1584,6 @@ void MainWindow::rebuildThemeMenu()
         setThemeSelection(QStringLiteral("__none__"), true);
     });
 
-#if INCLUDE_OPTIONAL_RESOURCES
-    QAction *builtinAction = themeMenu->addAction(tr("Built-in (compile-time)"));
-    builtinAction->setCheckable(true);
-    builtinAction->setData(QStringLiteral("__builtin__"));
-    themeActionGroup->addAction(builtinAction);
-    connect(builtinAction, &QAction::triggered, this, [this]() {
-        setThemeSelection(QStringLiteral("__builtin__"), true);
-    });
-#endif
-
     const QStringList names = themeManager.themeNames();
     for (const QString &tName : names) {
         QAction *themeAction = themeMenu->addAction(tName);
@@ -1645,14 +1616,6 @@ void MainWindow::setThemeSelection(const QString &name, bool persist)
     if (name.isEmpty() || name == QLatin1String("__none__")) {
         clearThemeVisuals();
         currentThemeName = QStringLiteral("__none__");
-    } else if (name == QLatin1String("__builtin__")) {
-#if INCLUDE_OPTIONAL_RESOURCES
-        applyBuiltinTheme();
-        currentThemeName = QStringLiteral("__builtin__");
-#else
-        clearThemeVisuals();
-        currentThemeName = QStringLiteral("__none__");
-#endif
     } else {
         const Theme *t = themeManager.theme(name);
         if (t && t->isValid()) {
@@ -1764,13 +1727,8 @@ void MainWindow::applyThemeVisuals(const Theme &theme)
 {
     currentTheme = theme;
     themedMode = true;
-    builtinThemeActive = false;
 
     applyThemeLayout(true, theme.characterPosition() == 1);
-
-    if (statusLabel) {
-        statusLabel->hide();
-    }
 
     const QString bgPath = theme.backgroundPath(themeZoomPercent());
     if (!bgPath.isEmpty()) {
@@ -1793,36 +1751,9 @@ void MainWindow::applyThemeVisuals(const Theme &theme)
     refreshCurrentDevice();
 }
 
-void MainWindow::applyBuiltinTheme()
-{
-#if INCLUDE_OPTIONAL_RESOURCES
-    applyThemeLayout(true, CHARACTER_IS_RIGHT != 0);
-    themedMode = true;
-    builtinThemeActive = true;
-
-    const QColor backgroundColor = QApplication::palette().color(QPalette::Window);
-    const bool darkTheme = backgroundColor.lightness() < 128;
-    themeBackgroundSource = QPixmap(darkTheme ? QStringLiteral(":/icons/bg_dark.png")
-                                              : QStringLiteral(":/icons/bg_light.png"));
-
-    restoreDefaultColors();
-
-    setMaximumSize(960, 960);
-    resize(960, 600);
-
-    updateThemeBackground();
-    updateStatusIllustration(globalHealth);
-    refreshCurrentDevice();
-#else
-    clearThemeVisuals();
-    currentThemeName = QStringLiteral("__none__");
-#endif
-}
-
 void MainWindow::clearThemeVisuals()
 {
     themedMode = false;
-    builtinThemeActive = false;
     themeBackgroundSource = QPixmap();
     themeBackgroundTimer.stop();
 
@@ -1911,10 +1842,7 @@ void MainWindow::updateThemeBackground()
 
     {
         QPainter painter(&canvas);
-        const bool characterRight = builtinThemeActive
-            ? (CHARACTER_IS_RIGHT != 0)
-            : (currentTheme.characterPosition() == 1);
-        const int x = characterRight ? (targetPx.width() - scaled.width()) : 0;
+        const int x = (currentTheme.characterPosition() == 1) ? (targetPx.width() - scaled.width()) : 0;
         const int y = 0;
         painter.drawPixmap(x, y, scaled);
     }
@@ -1949,8 +1877,6 @@ void MainWindow::initializeDefaultThemeState()
     if (healthStatusLabelVertical) healthStatusLabelVertical->show();
     if (temperatureValue) temperatureValue->show();
     if (healthStatusValue) healthStatusValue->show();
-
-    if (statusLabel) statusLabel->hide();
 
     if (gridLeftSpacer && gridLayout) {
         gridLayout->removeItem(gridLeftSpacer);
@@ -1999,12 +1925,6 @@ void MainWindow::applyThemeLayout(bool enabled, bool characterRight)
                     verticalLayout->removeItem(entry.second);
                 }
             }
-            if (statusLabel && verticalLayout->indexOf(statusLabel) < 0) {
-                verticalLayout->addWidget(statusLabel);
-            }
-        }
-        if (statusLabel) {
-            statusLabel->show();
         }
 
         if (temperatureLabelHorizontal) temperatureLabelHorizontal->show();
@@ -2042,13 +1962,6 @@ void MainWindow::applyThemeLayout(bool enabled, bool characterRight)
             resize(qMax(width(), 960), qMax(height(), 600));
         }
     } else {
-        if (verticalLayout && statusLabel && verticalLayout->indexOf(statusLabel) >= 0) {
-            verticalLayout->removeWidget(statusLabel);
-        }
-        if (statusLabel) {
-            statusLabel->hide();
-        }
-
         if (healthStatusLabelVertical) healthStatusLabelVertical->show();
         if (temperatureLabelVertical) temperatureLabelVertical->show();
         if (healthStatusValue) healthStatusValue->show();
@@ -2091,35 +2004,6 @@ void MainWindow::applyThemeLayout(bool enabled, bool characterRight)
     themeLayoutActive = enabled;
 }
 
-void MainWindow::updateStatusIllustration(const QString &health)
-{
-    if (!statusLabel) {
-        return;
-    }
-    if (!themeLayoutActive || !builtinThemeActive) {
-        // Only the built-in (compile-time) theme draws a health illustration in the
-        // status slot; runtime themes leave the slot hidden.
-        statusLabel->hide();
-        return;
-    }
-
-    QPixmap pixmap;
-    if (health == tr("Bad")) {
-        pixmap = QPixmap(":/icons/bad.png");
-    } else if (health == tr("Caution")) {
-        pixmap = QPixmap(":/icons/caution.png");
-    } else if (health == tr("Good")) {
-        pixmap = QPixmap(":/icons/good.png");
-    } else {
-        pixmap = QPixmap(":/icons/unknown.png");
-    }
-    const QPixmap scaled = pixmap.scaled(QSize(100, 30), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-    statusLabel->setPixmap(scaled);
-    statusLabel->setFixedSize(scaled.size() / scaled.devicePixelRatio());
-    statusLabel->setToolTip(health);
-    statusLabel->show();
-}
-
 void MainWindow::refreshCurrentDevice()
 {
     if (!deviceJson.isEmpty()) {
@@ -2129,7 +2013,7 @@ void MainWindow::refreshCurrentDevice()
 
 QString MainWindow::themeButtonTextColor() const
 {
-    if (themedMode && !builtinThemeActive) {
+    if (themedMode) {
         return currentTheme.colors().buttonText.name();
     }
     return QStringLiteral("black");
@@ -2137,7 +2021,7 @@ QString MainWindow::themeButtonTextColor() const
 
 QColor MainWindow::iconForegroundColor() const
 {
-    if (themedMode && !builtinThemeActive) {
+    if (themedMode) {
         return currentTheme.colors().labelText;
     }
     return palette().color(QPalette::ButtonText);
