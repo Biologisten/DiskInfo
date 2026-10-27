@@ -109,7 +109,7 @@ option(BUILD_TESTING "Build QDiskInfo tests" OFF)
 include(CTest)
 
 if(BUILD_TESTING)
-    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Gui)
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Gui Widgets)
     add_executable(qdiskinfo_theme_tests
         tests/theme_tests.cpp
         src/theme.cpp
@@ -127,6 +127,33 @@ if(BUILD_TESTING)
         Qt${QT_VERSION_MAJOR}::Test
     )
     add_test(NAME qdiskinfo_theme_tests COMMAND qdiskinfo_theme_tests)
+
+    set(TEST_APP_SOURCES ${PROJECT_SOURCES})
+    list(FILTER TEST_APP_SOURCES EXCLUDE REGEX "(^|/)main\\.cpp$")
+    list(FILTER TEST_APP_SOURCES EXCLUDE REGEX "translations\\.qrc$")
+    add_executable(qdiskinfo_icon_tests
+        tests/icon_tests.cpp
+        ${TEST_APP_SOURCES}
+    )
+    target_include_directories(qdiskinfo_icon_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/third_party/miniz
+    )
+    target_compile_definitions(qdiskinfo_icon_tests PRIVATE
+        PROJECT_VERSION_MAJOR=${${PROJECT_NAME}_VERSION_MAJOR}
+        PROJECT_VERSION_MINOR=${${PROJECT_NAME}_VERSION_MINOR}
+        ENABLE_TRANSLATIONS=$<BOOL:${ENABLE_TRANSLATIONS}>
+        INCLUDE_OPTIONAL_RESOURCES=$<BOOL:${INCLUDE_OPTIONAL_RESOURCES}>
+        CHARACTER_IS_RIGHT=$<BOOL:${CHARACTER_IS_RIGHT}>
+    )
+    target_link_libraries(qdiskinfo_icon_tests PRIVATE
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Test
+    )
+    add_test(NAME qdiskinfo_icon_tests COMMAND qdiskinfo_icon_tests)
+    set_tests_properties(qdiskinfo_icon_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 endif()
 
 include(FeatureSummary)

@@ -3,6 +3,7 @@
 #include "asciiview.h"
 #include "statusdot.h"
 #include "custombutton.h"
+#include "iconfallback.h"
 #include "jsonparser.h"
 
 #include <QDesktopServices>
@@ -22,35 +23,6 @@
 
 const int PRECISION_TOTALS_TO_STR = 2;
 const int PRECISION_CAPACITY_TO_STR = 0;
-
-namespace {
-
-QIcon iconFromResources(const QString &name, const QColor &color)
-{
-    QIcon icon(QStringLiteral(":/icons/%1.svg").arg(name));
-    const QPixmap source = icon.pixmap(QSize(64, 64));
-    if (source.isNull()) {
-        return icon;
-    }
-
-    QPixmap tinted = source;
-    QPainter painter(&tinted);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    painter.fillRect(tinted.rect(), color);
-    painter.end();
-    return QIcon(tinted);
-}
-
-QIcon desktopIcon(const QString &name, const QColor &color)
-{
-    const QIcon themeIcon = QIcon::fromTheme(name);
-    if (!themeIcon.pixmap(QSize(16, 16)).isNull()) {
-        return themeIcon;
-    }
-    return iconFromResources(name, color);
-}
-
-} // namespace
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -170,7 +142,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->actionUse_GB_instead_of_TB->setChecked(settings.value("UseGB", false).toBool());
 
     serialEchoAction = serialNumberLineEdit->addAction(
-        desktopIcon(QStringLiteral("visibility"), iconForegroundColor()),
+        themedIconOrFallback(QStringLiteral("visibility"), iconForegroundColor()),
         QLineEdit::TrailingPosition);
     connect(serialEchoAction, &QAction::triggered, this, [=]() {
         if (serialNumberLineEdit->echoMode() == QLineEdit::Password) {
@@ -2176,14 +2148,14 @@ void MainWindow::updateIconFallbacks()
     const QColor color = iconForegroundColor();
 
     if (prevButton) {
-        prevButton->setIcon(desktopIcon(QStringLiteral("go-previous"), color));
+        prevButton->setIcon(themedIconOrFallback(QStringLiteral("go-previous"), color));
     }
     if (nextButton) {
-        nextButton->setIcon(desktopIcon(QStringLiteral("go-next"), color));
+        nextButton->setIcon(themedIconOrFallback(QStringLiteral("go-next"), color));
     }
     if (serialEchoAction && serialNumberLineEdit) {
         const bool hidden = serialNumberLineEdit->echoMode() == QLineEdit::Password;
         serialEchoAction->setIcon(
-            desktopIcon(hidden ? QStringLiteral("visibility") : QStringLiteral("hint"), color));
+            themedIconOrFallback(hidden ? QStringLiteral("visibility") : QStringLiteral("hint"), color));
     }
 }
