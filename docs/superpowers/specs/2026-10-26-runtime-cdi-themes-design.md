@@ -16,8 +16,7 @@ themes recognisable:
 - full-window background artwork;
 - translucent "glass" panels, so the artwork remains visible through the table,
   fields and buttons;
-- colours read from the theme's `theme.ini`;
-- the theme's drive illustration in the existing left-hand status slot.
+- colours read from the theme's `theme.ini`.
 
 Themes must be switchable at runtime. A user must also be able to import a CDI
 ZIP from inside QDiskInfo, without manually extracting it.
@@ -30,15 +29,14 @@ ZIP from inside QDiskInfo, without manually extracting it.
 2. Parse `theme.ini`: label/button/list text colours, list backgrounds and
    lines, glass colour, `GlassAlpha`, character position, and parent themes.
 3. Resolve parent themes for missing colours and images, with cycle protection.
-4. Resolve CDI image names: `*Background-<zoom>.png` and
-   `diskGood`/`diskCaution`/`diskBad`/`diskUnknown-<zoom>.png`, plus their
-   `diskStatus*` fallbacks.
+4. Resolve CDI image names, chiefly `*Background-<zoom>.png`; the other assets
+   (including any `disk*` art) are indexed but not drawn.
 5. Draw the background scaled to cover the window without distortion, anchored
    to the character side and top, and redraw on resize and DPR changes.
 6. Apply theme colours to labels, fields, buttons, table rows, table headers,
    grid lines and selection, with glass translucency.
-7. Put the theme's drive illustration in the existing left status slot, swapping
-   with health.
+7. Leave the left status slot to the compile-time theme's health illustration;
+   runtime themes draw no disk artwork.
 8. Add `Settings > Theme`: Default, Built-in (compile-time builds only), each
    discovered theme, Import Themes from CDI ZIP…, and Open Themes Folder.
 9. Persist the selection in the existing `[Theme] Name` key.
@@ -171,9 +169,12 @@ ZIP from inside QDiskInfo, without manually extracting it.
 - Health and temperature pills keep their semantic green/yellow/red/grey
   backgrounds. Their HTML text uses `ButtonText`.
 - Table status dots keep their semantic green/yellow/red/grey colours.
-- Drive illustration: `diskGood`, `diskCaution`, `diskBad`, `diskUnknown` in the
-  left status slot. If those are absent, fall back to `diskStatus*`; if those
-  are absent, hide the slot.
+- Drive illustration: none. Runtime themes leave the left status slot hidden.
+  CDI's `disk*` assets (`diskGood`, `diskCaution`, `diskBad`, `diskUnknown` and
+  their `Mini`/`diskStatus*` variants) are multi-row strips of disk-list cards
+  rather than a single illustration, so they are not drawn and the disk
+  selectors keep their default look. The built-in (compile-time) theme keeps
+  its health illustration in that slot.
 - Menus and dialogs stay native.
 - All theme styling is applied to the central widget only and removed when the
   theme is cleared.
@@ -295,7 +296,8 @@ The menu rebuilds on `aboutToShow` and after import.
 - Build with default flags and with legacy `INCLUDE_OPTIONAL_RESOURCES` /
   `CHARACTER_IS_RIGHT` flags.
 - Aoi, AoiNight, AoiDark and AoiLight: artwork visible, text readable, glass
-  panels translucent, correct character side, correct drive illustration.
+  panels translucent, correct character side, no disk artwork in the info
+  column.
 - Live switching between themes and back to Default; resize; simulated DPR
   change; restart persistence.
 - Import the supplied 67 MB Aoi ZIP; verify all themes appear; test overwrite

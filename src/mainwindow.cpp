@@ -1764,6 +1764,10 @@ void MainWindow::applyThemeVisuals(const Theme &theme)
 
     applyThemeLayout(true, theme.characterPosition() == 1);
 
+    if (statusLabel) {
+        statusLabel->hide();
+    }
+
     const QString bgPath = theme.backgroundPath(themeZoomPercent());
     if (!bgPath.isEmpty()) {
         themeBackgroundSource = QPixmap(bgPath);
@@ -2084,69 +2088,26 @@ void MainWindow::updateStatusIllustration(const QString &health)
     if (!statusLabel) {
         return;
     }
-    if (!themeLayoutActive) {
+    if (!themeLayoutActive || !builtinThemeActive) {
+        // Only the built-in (compile-time) theme draws a health illustration in the
+        // status slot; runtime themes leave the slot hidden.
         statusLabel->hide();
         return;
     }
 
-    if (builtinThemeActive) {
-        QPixmap pixmap;
-        if (health == tr("Bad")) {
-            pixmap = QPixmap(":/icons/bad.png");
-        } else if (health == tr("Caution")) {
-            pixmap = QPixmap(":/icons/caution.png");
-        } else if (health == tr("Good")) {
-            pixmap = QPixmap(":/icons/good.png");
-        } else {
-            pixmap = QPixmap(":/icons/unknown.png");
-        }
-        const QPixmap scaled = pixmap.scaled(QSize(100, 30), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
-        statusLabel->setPixmap(scaled);
-        statusLabel->setFixedSize(scaled.size() / scaled.devicePixelRatio());
-        statusLabel->setToolTip(health);
-        statusLabel->show();
-        return;
-    }
-
-    QString baseName;
-    QString fallbackName;
+    QPixmap pixmap;
     if (health == tr("Bad")) {
-        baseName = QStringLiteral("diskBad");
-        fallbackName = QStringLiteral("diskStatusBad");
+        pixmap = QPixmap(":/icons/bad.png");
     } else if (health == tr("Caution")) {
-        baseName = QStringLiteral("diskCaution");
-        fallbackName = QStringLiteral("diskStatusCaution");
+        pixmap = QPixmap(":/icons/caution.png");
     } else if (health == tr("Good")) {
-        baseName = QStringLiteral("diskGood");
-        fallbackName = QStringLiteral("diskStatusGood");
+        pixmap = QPixmap(":/icons/good.png");
     } else {
-        baseName = QStringLiteral("diskUnknown");
-        fallbackName = QStringLiteral("diskStatusUnknown");
+        pixmap = QPixmap(":/icons/unknown.png");
     }
-
-    const int zoom = themeZoomPercent();
-    QString path = currentTheme.assetPath(baseName, zoom);
-    if (path.isEmpty()) {
-        path = currentTheme.assetPath(fallbackName, zoom);
-    }
-    if (path.isEmpty()) {
-        statusLabel->hide();
-        return;
-    }
-
-    QPixmap pixmap(path);
-    if (pixmap.isNull()) {
-        statusLabel->hide();
-        return;
-    }
-
-    static const QRegularExpression suffixRe(QStringLiteral("-(\\d+)\\.png$"));
-    const QRegularExpressionMatch match = suffixRe.match(path);
-    if (match.hasMatch()) {
-        pixmap.setDevicePixelRatio(match.captured(1).toInt() / 100.0);
-    }
-    statusLabel->setPixmap(pixmap);
-    statusLabel->setFixedSize(pixmap.size() / pixmap.devicePixelRatio());
+    const QPixmap scaled = pixmap.scaled(QSize(100, 30), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    statusLabel->setPixmap(scaled);
+    statusLabel->setFixedSize(scaled.size() / scaled.devicePixelRatio());
     statusLabel->setToolTip(health);
     statusLabel->show();
 }
