@@ -2,35 +2,67 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Load CrystalDiskInfo theme packs at runtime, skin QDiskInfo with their artwork/colours, switch themes live, and import them from a CDI ZIP.
+**Status:** Implemented and hardened on `feature/runtime-cdi-themes-impl`.
 
-**Architecture:** New `Theme` and `ThemeManager` classes own parsing, inheritance, discovery and ZIP import; a vendored miniz + `ZipArchive` wrapper reads archives. `MainWindow` gains a theme menu, reversible layout handling, background painting, palette/QSS styling and theme drive illustration. The no-theme and compile-time theme paths remain intact.
+- Tasks 1–6: runtime theme parsing/inheritance, discovery, ZIP import, menu,
+  persistence, colour and background skinning — done.
+- Task 7: reversible themed layout — done. The drive illustration planned there
+  was deliberately not shipped: CDI `disk*` assets are multi-row disk-list
+  strips rather than a single illustration, so runtime themes leave the left
+  status slot hidden.
+- Task 8: Clear Settings, docs and verification — done. The legacy
+  `INCLUDE_OPTIONAL_RESOURCES` / `CHARACTER_IS_RIGHT` compile-time build was
+  removed after review; runtime themes are the only theming path.
+- Task 9: post-review hardening — bundled navigation/serial icon fallbacks,
+  `qdiskinfo_icon_tests`, and a CI tests job with pacman/ccache caching — done.
 
-**Tech Stack:** C++17, Qt 5/6 Widgets, CMake, Qt Test, vendored miniz 3.1.2.
+**Goal:** Load CrystalDiskInfo theme packs at runtime, skin QDiskInfo with their
+artwork/colours, switch themes live, and import them from a CDI ZIP. Runtime
+themes are the only theming path: there is no compile-time theme build and no
+rebuild is needed to add a theme. Outside a desktop icon theme, the disk
+navigation arrows and the serial number reveal button still work through icons
+bundled with QDiskInfo.
+
+**Architecture:** New `Theme` and `ThemeManager` classes own parsing, inheritance, discovery and ZIP import; a vendored miniz + `ZipArchive` wrapper reads archives. `MainWindow` gains a theme menu, reversible layout handling, background painting and palette/QSS styling. A small `iconfallback` helper resolves desktop icons first and falls back to bundled, tinted SVGs for the navigation and serial-number controls. The default/no-theme path remains intact.
+
+**Tech Stack:** C++17, Qt 5/6 Widgets, CMake, Qt Test, vendored miniz 3.1.2, GitHub Actions (Arch container + ccache).
 
 **Spec:** `docs/superpowers/specs/2026-10-26-runtime-cdi-themes-design.md`
+
+**Current goals**
+
+- Keep runtime CDI themes the only theming path; no compile-time theme mode.
+- Keep the default/no-theme UI equivalent to upstream.
+- Keep core controls usable without a desktop icon theme, while desktop icons
+  still win whenever they can render the requested name.
+- Keep parser, ZIP and icon-fallback regressions covered by `ctest`, and run
+  those suites in CI on every push.
+- Keep theme artwork unbundled; only QDiskInfo's own icons ship in resources.
 
 ## Global Constraints
 
 - Qt 5 and Qt 6 compatible; C++17; follow existing QDiskInfo naming/style.
-- No new runtime dependency. Vendor miniz 3.1.2 (`miniz.c`, `miniz.h`, `LICENSE`) under `third_party/miniz/`.
+- No new runtime dependency beyond Qt; vendor miniz 3.1.2 (`miniz.c`, `miniz.h`, `LICENSE`) under `third_party/miniz/`. The bundled icon fallbacks need Qt's SVG image plugin (`qt6-svg` on Arch), which the README documents.
 - GPL-3.0-compatible. Never commit CDI artwork.
 - Linux XDG paths; existing `QSettings("qdiskinfo", "qdiskinfo")`.
 - All theme behaviour is inactive when no theme is selected.
 - Default/no-theme appearance must match upstream.
-- Sentinels: `[Theme] Name` = `__none__` (Default), `__builtin__` (compiled theme), or a theme directory basename.
+- Sentinels: `[Theme] Name` = `__none__` (Default), or a theme directory basename.
 - Theme identity is the directory basename; user theme roots shadow system roots.
 - Requested asset zoom = `devicePixelRatio * 100`, clamped 100–300.
 - `ListBk1/2` wins over `ListBg1/2`; `ListText1`/`ListLine1` are the only list text/line colours used.
-- Runtime themes have no 960×960 maximum; the legacy compiled theme keeps it.
+- Runtime themes have no 960×960 maximum; switching to Default restores the upstream sizing rules.
+- Runtime themes draw no disk artwork; the left status slot stays hidden.
+- Bundled fallbacks exist for `go-previous`, `go-next`, `visibility` and `hint`; when the desktop icon theme can render one, it is used unchanged.
 
 ## Review Focus
 
 1. Real `theme.ini` files use `[Color];RGB` and values ending in `;`; the parser must still read them.
 2. ZIPs contain nested theme folders, unrelated executables and potentially traversal/symlink entries; only safe theme assets may be installed.
 3. Parent themes can be duplicated, missing or cyclic; resolution must be deterministic and must not hang.
-4. Switching back to Default (including from the legacy compile-time theme) must restore every hidden widget, spacer, palette, size rule and label style.
+4. Switching back to Default (from any runtime theme) must restore every hidden widget, spacer, palette, size rule and label style.
 5. Light/dark translucency, window resize and DPR changes must keep the artwork visible, text readable and character anchored correctly.
+6. The bundled icon fallbacks must only appear when the desktop theme cannot render the name, and must keep the navigation buttons' icon box intact.
 
 ---
 
@@ -55,7 +87,7 @@
   - `const ThemeColors &Theme::colors() const;`
   - `QColor Theme::backgroundColor() const;`
 
-- [ ] **Step 1: Write the failing parser tests**
+- [x] **Step 1: Write the failing parser tests**
 
 In `tests/theme_tests.cpp`, add helpers `writeFile(const QString &path, const QByteArray &data)` (creates parent directories and writes the file) and `readFile(const QString &path)` (opens and returns the contents). Use `QTemporaryDir`.
 
@@ -134,7 +166,7 @@ QTEST_GUILESS_MAIN(ThemeTests)
 
 Add `QTEST_GUILESS_MAIN(ThemeTests)` after a `class ThemeTests : public QObject { Q_OBJECT private slots: ... };` declaration. Include `<QtTest>`, `<QTemporaryDir>`, `"theme.h"`.
 
-- [ ] **Step 2: Run the test and verify it fails**
+- [x] **Step 2: Run the test and verify it fails**
 
 Configure and run:
 
@@ -146,7 +178,7 @@ ctest --test-dir build -R qdiskinfo_theme_tests --output-on-failure
 
 Expected: configure succeeds, compile fails because `Theme` is not declared.
 
-- [ ] **Step 3: Implement the parser and defaults**
+- [x] **Step 3: Implement the parser and defaults**
 
 In `include/theme.h`:
 
@@ -177,7 +209,7 @@ In `src/theme.cpp`:
 - `Theme::name()` returns `QFileInfo(m_directory).fileName()`.
 - `Theme::isValid()` returns `m_valid`.
 
-- [ ] **Step 4: Add the test target to CMake**
+- [x] **Step 4: Add the test target to CMake**
 
 Add:
 
@@ -201,7 +233,7 @@ if(BUILD_TESTING)
 endif()
 ```
 
-- [ ] **Step 5: Run the tests and verify they pass**
+- [x] **Step 5: Run the tests and verify they pass**
 
 ```bash
 cmake --build build --target qdiskinfo_theme_tests -j$(nproc)
@@ -210,7 +242,7 @@ ctest --test-dir build -R qdiskinfo_theme_tests --output-on-failure
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add include/theme.h src/theme.cpp tests/theme_tests.cpp CMakeLists.txt
@@ -234,7 +266,7 @@ git commit -m "feat(theme): parse CDI theme.ini colours and metadata"
   - `QString Theme::backgroundPath(int zoomPercent) const;`
   - `bool Theme::hasOwnBackground() const;`
 
-- [ ] **Step 1: Write failing inheritance and asset tests**
+- [x] **Step 1: Write failing inheritance and asset tests**
 
 Add tests that create themes in a temporary directory and resolve them:
 
@@ -326,7 +358,7 @@ void resolvesBackgroundThroughParents()
 }
 ```
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 ```bash
 cmake --build build --target qdiskinfo_theme_tests -j$(nproc)
@@ -335,7 +367,7 @@ ctest --test-dir build -R qdiskinfo_theme_tests --output-on-failure
 
 Expected: compile fails because `resolve`, `searchDirectories`, `assetPath`, `backgroundPath` and `hasOwnBackground` are not declared.
 
-- [ ] **Step 3: Implement inheritance and asset resolution**
+- [x] **Step 3: Implement inheritance and asset resolution**
 
 In `src/theme.cpp`:
 
@@ -353,7 +385,7 @@ In `src/theme.cpp`:
 - `hasOwnBackground()` checks only `m_directory` for a `*Background-*.png` file.
 - `isResolved()` returns `m_resolved`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 cmake --build build --target qdiskinfo_theme_tests -j$(nproc)
@@ -362,7 +394,7 @@ ctest --test-dir build -R qdiskinfo_theme_tests --output-on-failure
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add include/theme.h src/theme.cpp tests/theme_tests.cpp
@@ -401,7 +433,7 @@ private:
 };
 ```
 
-- [ ] **Step 1: Write failing discovery tests**
+- [x] **Step 1: Write failing discovery tests**
 
 ```cpp
 void discoversThemesAndUserShadowsSystem()
@@ -432,11 +464,11 @@ void ignoresMissingRoots()
 }
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Expected: compile fails because `thememanager.h` does not exist.
 
-- [ ] **Step 3: Implement ThemeManager discovery**
+- [x] **Step 3: Implement ThemeManager discovery**
 
 - `defaultThemeRoots()` returns each `QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation)` entry + `/qdiskinfo/themes`, deduplicated and cleaned. This matches the explicit `QSettings("qdiskinfo", "qdiskinfo")` name and the documented `~/.local/share/qdiskinfo/themes` path.
 - `defaultWritableRoot()` returns `QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/qdiskinfo/themes"`.
@@ -450,9 +482,9 @@ Expected: compile fails because `thememanager.h` does not exist.
 - `theme(name)` returns a pointer into `m_themes` or `nullptr`.
 - Add `src/thememanager.cpp` to the test target in `CMakeLists.txt`.
 
-- [ ] **Step 4: Run tests and verify pass**
+- [x] **Step 4: Run tests and verify pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add include/thememanager.h src/thememanager.cpp tests/theme_tests.cpp CMakeLists.txt
@@ -499,7 +531,7 @@ private:
 };
 ```
 
-- [ ] **Step 1: Vendor miniz 3.1.2**
+- [x] **Step 1: Vendor miniz 3.1.2**
 
 ```bash
 curl -L -o /tmp/miniz-3.1.2.zip \
@@ -509,7 +541,7 @@ unzip -p /tmp/miniz-3.1.2.zip miniz.h > third_party/miniz/miniz.h
 unzip -p /tmp/miniz-3.1.2.zip LICENSE > third_party/miniz/LICENSE
 ```
 
-- [ ] **Step 2: Write failing ZIP tests**
+- [x] **Step 2: Write failing ZIP tests**
 
 Add a test helper using miniz's writer. Include `ziparchive.h` and `"miniz.h"` in the test file.
 
@@ -577,11 +609,11 @@ void detectsSymlinkExternalAttributes()
 }
 ```
 
-- [ ] **Step 3: Run tests and verify failure**
+- [x] **Step 3: Run tests and verify failure**
 
 Expected: compile fails because `ziparchive.h` does not exist. This also verifies the miniz files are found.
 
-- [ ] **Step 4: Implement ZipArchive and CMake integration**
+- [x] **Step 4: Implement ZipArchive and CMake integration**
 
 - Change `project(QDiskInfo VERSION 0.4 LANGUAGES C CXX)`.
 - Add `third_party/miniz/miniz.c` to `PROJECT_SOURCES` and `third_party/miniz` to the app include directories.
@@ -600,9 +632,9 @@ Expected: compile fails because `ziparchive.h` does not exist. This also verifie
   - accept `.` and empty interior components after cleaning.
 - `isSymlinkExternalAttr`: `(externalAttr >> 16 & 0xF000u) == 0xA000u`.
 
-- [ ] **Step 5: Run tests and verify pass**
+- [x] **Step 5: Run tests and verify pass**
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add third_party/miniz include/ziparchive.h src/ziparchive.cpp tests/theme_tests.cpp CMakeLists.txt
@@ -640,7 +672,7 @@ ThemeZipInfo ThemeManager::inspectZip(const QString &zipPath) const;
 ThemeImportResult ThemeManager::importZip(const QString &zipPath, bool overwriteExisting);
 ```
 
-- [ ] **Step 1: Write failing import tests**
+- [x] **Step 1: Write failing import tests**
 
 Add a helper that writes a small CDI-style ZIP:
 
@@ -732,11 +764,11 @@ void rejectsTraversalEntries()
 }
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Expected: compile fails because `inspectZip` and `importZip` are not declared.
 
-- [ ] **Step 3: Implement inspection and import**
+- [x] **Step 3: Implement inspection and import**
 
 In `src/thememanager.cpp`:
 
@@ -764,14 +796,14 @@ In `src/thememanager.cpp`:
 - Keep all target paths under the canonical writable root; reject any resolved path that escapes it.
 - Parent references remain names only; no path resolution.
 
-- [ ] **Step 4: Run tests and verify pass**
+- [x] **Step 4: Run tests and verify pass**
 
 ```bash
 cmake --build build --target qdiskinfo_theme_tests -j$(nproc)
 ctest --test-dir build -R qdiskinfo_theme_tests --output-on-failure
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add include/thememanager.h src/thememanager.cpp tests/theme_tests.cpp
@@ -793,9 +825,9 @@ git commit -m "feat(theme): import CDI theme archives safely"
   - `MainWindow::applyThemeVisuals(const Theme&)`, `clearThemeVisuals()`.
   - `MainWindow::updateThemeBackground()`, `themeZoomPercent()`, `applyThemeColors()`, `restoreDefaultColors()`.
   - `MainWindow::initializeDefaultThemeState()`, `refreshCurrentDevice()`, `themeButtonTextColor()`.
-  - Members: `ThemeManager themeManager`, `Theme currentTheme`, `bool themedMode`, `bool themeLayoutActive`, `bool builtinThemeActive`, `QString currentThemeName`, palettes, background timer/pixmap.
+  - Members: `ThemeManager themeManager`, `Theme currentTheme`, `bool themedMode`, `bool themeLayoutActive`, `QString currentThemeName`, palettes, background timer/pixmap. (The temporary `builtinThemeActive` flag was removed with the compile-time mode.)
 
-- [ ] **Step 1: Add a failing stylesheet test**
+- [x] **Step 1: Add a failing stylesheet test**
 
 ```cpp
 void buildsThemeStyleSheet()
@@ -813,11 +845,11 @@ void buildsThemeStyleSheet()
 }
 ```
 
-- [ ] **Step 2: Run the test and verify it fails**
+- [x] **Step 2: Run the test and verify it fails**
 
 Expected: compile fails because `buildThemeStyleSheet` is not declared.
 
-- [ ] **Step 3: Implement stylesheet generation and theme menu**
+- [x] **Step 3: Implement stylesheet generation and theme menu**
 
 In `include/theme.h` / `src/theme.cpp`:
 
@@ -847,7 +879,6 @@ In `include/mainwindow.h`:
 In `src/mainwindow.cpp` constructor:
 
 - After `ui->setupUi(this)`, save `defaultCentralPalette`, `defaultTablePalette`, `defaultViewportAutoFillBackground`, `defaultAlternatingRowColors`, `defaultMinimumWidth`, `defaultMaximumSize`.
-- Create `statusLabel = new QLabel(ui->centralwidget);` and hide it.
 - Build `verticalSpacers` (all spacer items in `verticalLayout`), `infoSpacer`, `gridLeftSpacer` pointers.
 - Remove the old block that deletes the horizontal labels and calls `transformWindow()`. Call `initializeDefaultThemeState()` to hide horizontal labels, show vertical labels and remove `gridLeftSpacer` (matching upstream default). `transformWindow()` stays unused until Task 7; do not delete it yet.
 - Call `themeManager.reload()`, `setupThemeMenu()`, read `settings.value("Theme/Name")`, and call `setThemeSelection(name, false)`.
@@ -875,13 +906,13 @@ Menu implementation:
 Colour/background implementation:
 
 - `applyThemeVisuals(theme)`:
-  - `currentTheme = theme; themedMode = true; builtinThemeActive = false;`
+  - `currentTheme = theme; themedMode = true;`
   - `themeBackgroundSource = QPixmap(theme.backgroundPath(themeZoomPercent()));`
   - if empty and `theme.backgroundColor().isValid()`, create a 1×1 pixmap filled with that colour;
   - if still empty, restore `defaultCentralPalette` and `setAutoFillBackground(false)` so a previous theme's artwork cannot linger;
   - `applyThemeColors(theme.colors()); updateThemeBackground(); refreshCurrentDevice();`
 - `clearThemeVisuals()`:
-  - `themedMode = false; builtinThemeActive = false; themeBackgroundSource = QPixmap(); themeBackgroundTimer.stop();`
+  - `themedMode = false; themeBackgroundSource = QPixmap(); themeBackgroundTimer.stop();`
   - `restoreDefaultColors();`
   - central widget palette = `defaultCentralPalette`, `setAutoFillBackground(false)`;
   - `refreshCurrentDevice()`.
@@ -903,12 +934,12 @@ Colour/background implementation:
 - `resizeEvent`: call base; if `themedMode`, start `themeBackgroundTimer`.
 - `themeZoomPercent()`: `qBound(100, qRound(screen()->devicePixelRatio() * 100.0), 300)`; fall back to `QGuiApplication::primaryScreen()`.
 - `refreshCurrentDevice()`: if `deviceJson` is not empty, call `populateWindow(deviceJson, globalHealth, globalIsNvme ? globalNvmeSmartOrdered : QVector<QPair<QString,int>>());`.
-- `themeButtonTextColor()`: returns `currentTheme.colors().buttonText.name()` when `themedMode && !builtinThemeActive`, otherwise `"black"`.
-- `initializeDefaultThemeState()`: set `themeLayoutActive = false`, hide the four horizontal labels, remove `gridLeftSpacer` from grid (2,0) and keep the pointer. Task 7 extends this with the vertical spacer and status label.
+- `themeButtonTextColor()`: returns `currentTheme.colors().buttonText.name()` when `themedMode`, otherwise `"black"`.
+- `initializeDefaultThemeState()`: set `themeLayoutActive = false`, hide the four horizontal labels, remove `gridLeftSpacer` from grid (2,0) and keep the pointer. Task 7 extends this with the vertical spacer layout.
 - `labelStyle` in `populateWindow`: use `themeButtonTextColor()`.
 - Make `populateWindow` update both vertical and horizontal health/temperature labels. Keep the `percentageText` branch on `themeLayoutActive` (false for now, so default `<br>` format).
 
-- [ ] **Step 4: Build and manually verify visuals**
+- [x] **Step 4: Build and manually verify visuals**
 
 ```bash
 cmake --build build -j$(nproc)
@@ -917,7 +948,7 @@ ctest --test-dir build -R qdiskinfo_theme_tests --output-on-failure
 
 Run with the Aoi theme present in `~/.local/share/qdiskinfo/themes`; confirm artwork appears, fields/table/buttons are translucent, text colours follow the theme, switching to Default restores the plain UI, and the selection persists after restart. The layout is still the default one at this stage; Task 7 adds the themed layout.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add include/theme.h src/theme.cpp include/mainwindow.h src/mainwindow.cpp tests/theme_tests.cpp
@@ -926,24 +957,27 @@ git commit -m "feat(theme): menu, persistence, artwork and colour skinning"
 
 ---
 
-### Task 7: Reversible themed layout and drive illustration
+### Task 7: Reversible themed layout
+
+> **Status note:** Delivered without the drive illustration. The left status slot
+> stays hidden for runtime themes; the planned `updateStatusIllustration()` was
+> removed together with the compile-time theme mode (Task 9).
 
 **Files:**
 - Modify: `include/mainwindow.h`, `src/mainwindow.cpp`
 
 **Interfaces:**
-- Consumes: `Theme::characterPosition`, `Theme::assetPath`, `themeLayoutActive`.
+- Consumes: `Theme::characterPosition`, `themeLayoutActive`.
 - Produces:
   - `void applyThemeLayout(bool enabled, bool characterRight);`
-  - `void updateStatusIllustration(const QString &health);`
   - `void initializeDefaultThemeState();`
   - `void refreshCurrentDevice();`
 
-- [ ] **Step 1: Write the failing manual check**
+- [x] **Step 1: Write the failing manual check**
 
 Build and run. Select Aoi. Expected currently: artwork/colours appear but the layout stays in the default form; the interface still shows the vertical health/temperature column and no drive illustration.
 
-- [ ] **Step 2: Implement non-destructive layout handling**
+- [x] **Step 2: Implement non-destructive layout handling**
 
 In `src/mainwindow.cpp`:
 
@@ -958,14 +992,12 @@ In `src/mainwindow.cpp`:
   - enabling:
     - hide the vertical health/temperature labels;
     - remove every spacer in `verticalSpacers` from `verticalLayout` (do not delete);
-    - add `statusLabel` to `verticalLayout` if not already there, show it;
     - show the four horizontal labels;
     - remove `infoSpacer` from the info layout (do not delete);
     - if `characterRight`, ensure `gridLeftSpacer` is removed; otherwise reinsert it at grid (2,0) if it is not already there;
     - if `characterRight`, add `characterSpacer` at grid (3,3) and set minimum width 645; otherwise set minimum width 960;
     - restore `defaultMaximumSize` (runtime themes are uncapped), then grow the window to at least 960×600;
   - disabling:
-    - remove `statusLabel` from the layout and hide it;
     - show the vertical labels;
     - reinsert each `verticalSpacers` item at its saved index in ascending index order if not already present;
     - hide the horizontal labels;
@@ -976,78 +1008,61 @@ In `src/mainwindow.cpp`:
   - set `themeLayoutActive = enabled`.
 - In `applyThemeVisuals`, call `applyThemeLayout(true, theme.characterPosition() == 1)` before styling.
 - In `clearThemeVisuals`, call `applyThemeLayout(false, false)` before restoring visuals.
-- `updateStatusIllustration(health)`:
-  - if `!themeLayoutActive`, hide `statusLabel` and return;
-  - if `builtinThemeActive`, use `:/icons/{good,caution,bad,unknown}.png` scaled to 100×30;
-  - otherwise map health to `diskGood`, `diskCaution`, `diskBad`, `diskUnknown`; use `currentTheme.assetPath(base, themeZoomPercent())`; if empty, try `diskStatusGood` etc.; if still empty, hide;
-  - load the pixmap; parse the selected file's `-<suffix>.png` suffix and call `setDevicePixelRatio(suffix / 100.0)` (not the requested zoom) so a 300% asset displays at 100% logical size; `setFixedSize(pixmap.size() / pixmap.devicePixelRatio())`;
-  - `setPixmap`, `setToolTip(health)`, `show()`.
-- Replace the `if (INCLUDE_OPTIONAL_RESOURCES)` status-image block in `populateWindow` with `updateStatusIllustration(health)`.
+- Do not draw disk artwork: runtime themes hide the left status slot (see the status note above).
 - Replace the label-selection branch with both-label updates:
   - set the same temperature style/text on `temperatureValue` and `temperatureValueHorizontal`;
   - set health style/text on both; compact percentage (`"  (" + percentage + ")"`) for horizontal, `<br>` for vertical;
   - `labelStyle` uses `themeButtonTextColor()`.
-- Change the percentage branch from `INCLUDE_OPTIONAL_RESOURCES` to `themeLayoutActive`.
+- Set the percentage branch to `themeLayoutActive`.
 - Remove the old `transformWindow()` function and its call site (already removed in Task 6) once the new layout is verified.
 - Add cleanup in `~MainWindow()` for removed spacers (`infoSpacer`, `gridLeftSpacer`, and each item in `verticalSpacers`) that are not owned by a layout.
 
-- [ ] **Step 3: Build and verify the layout**
+- [x] **Step 3: Build and verify the layout**
 
 ```bash
 cmake --build build -j$(nproc)
 ```
 
 Select Aoi, AoiNight, AoiDark and AoiLight in turn:
-- the left status column shows the themed drive illustration;
+- the left status slot stays hidden (no disk artwork stacked next to the info column);
 - the character is on the side declared by `Character Position`;
 - the table and form use the themed layout;
 - switching to Default restores the vertical health/temperature labels, the info spacer, the upstream default layout (the grid-left spacer stays removed) and the default size rules;
 - switching back and forth does not crash or leave gaps.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add include/mainwindow.h src/mainwindow.cpp
-git commit -m "feat(theme): switch themed layout and drive illustration at runtime"
+git commit -m "feat(theme): switch the themed layout at runtime"
 ```
 
 ---
 
-### Task 8: Legacy compiled theme, Clear Settings, docs and final verification
+### Task 8: Clear Settings, docs and verification
 
 **Files:**
 - Modify: `include/mainwindow.h`, `src/mainwindow.cpp`, `README.md`
-- Modify: `tests/theme_tests.cpp` if a sentinel/helper test is useful.
 
 **Interfaces:**
-- Consumes: `INCLUDE_OPTIONAL_RESOURCES`, `CHARACTER_IS_RIGHT`, `clearThemeVisuals`, `applyThemeLayout`.
+- Consumes: `clearThemeVisuals`, `applyThemeLayout`, `ThemeManager`.
 - Produces:
-  - `void applyBuiltinTheme();`
-  - startup precedence for `__none__`, `__builtin__`, saved runtime themes.
+  - startup precedence for `__none__` and saved runtime themes.
   - Clear Settings resets to `__none__`.
 
-- [ ] **Step 1: Implement the built-in theme and startup precedence**
+- [x] **Step 1: Implement startup precedence and Clear Settings**
 
-- If `INCLUDE_OPTIONAL_RESOURCES` is true, add `Built-in (compile-time)` to the Theme menu with data `__builtin__`.
-- `applyBuiltinTheme()`:
-  - `applyThemeLayout(true, CHARACTER_IS_RIGHT)`;
-  - `themedMode = true; builtinThemeActive = true;`
-  - choose `:/icons/bg_light.png` or `:/icons/bg_dark.png` from the default palette lightness (the old logic);
-  - `restoreDefaultColors()` so no themed colours are applied;
-  - `setMaximumSize(960, 960); resize(960, 600);`
-  - `updateThemeBackground(); updateStatusIllustration(globalHealth); refreshCurrentDevice();`
 - Startup:
-  - saved `__none__` -> default state;
-  - saved `__builtin__` -> built-in only if compiled, otherwise default;
+  - no saved key -> Default;
+  - saved `__none__` -> Default;
   - saved runtime name -> apply if present;
-  - saved name missing -> clear the key and use Default;
-  - no saved key + compiled resources -> built-in (legacy behaviour);
-  - no saved key + no compiled resources -> Default.
-- `clearThemeVisuals()` must restore `defaultMaximumSize` and default minimum width (already in Task 7) and clear the built-in flag.
-- Add `showEvent(QShowEvent*)`: call the base, connect `windowHandle()->screenChanged` once to a lambda that, when a theme is active, reloads `themeBackgroundSource` from `currentTheme.backgroundPath(themeZoomPercent())` (unless built-in), then calls `updateThemeBackground()` and `updateStatusIllustration(globalHealth)`. Refresh the background/status once for the actual screen the window opened on. This re-resolves DPI assets after a monitor change.
+  - saved name missing -> clear the key and use Default.
+  - A stale `__builtin__` value from an older build takes the missing-name path, so it is cleared and Default is used.
+- `clearThemeVisuals()` must restore `defaultMaximumSize` and default minimum width (already in Task 7).
+- Add `showEvent(QShowEvent*)`: call the base, connect `windowHandle()->screenChanged` once to a lambda that, when a theme is active, reloads `themeBackgroundSource` from `currentTheme.backgroundPath(themeZoomPercent())`, then calls `updateThemeBackground()`. Refresh the background once for the actual screen the window opened on. This re-resolves DPI assets after a monitor change.
 - `on_actionClear_Settings_triggered`: after `settings.clear()` and the existing resets, set `settings.setValue("Theme/Name", "__none__")`, call `setThemeSelection("__none__", false)`, and rebuild the menu.
 
-- [ ] **Step 2: Update README**
+- [x] **Step 2: Update README**
 
 Replace the "Using CrystalDiskInfo Anime Themes" section with:
 
@@ -1055,49 +1070,83 @@ Replace the "Using CrystalDiskInfo Anime Themes" section with:
 - download the CDI edition ZIP from CrystalMark and import it directly;
 - themes are installed under `~/.local/share/qdiskinfo/themes`;
 - switch themes from the same menu, no rebuild needed;
-- mention that the old `INCLUDE_OPTIONAL_RESOURCES` / `CHARACTER_IS_RIGHT` options remain as a legacy compile-time mode;
+- state that runtime themes are the only theming path (there is no compile-time mode);
 - note that theme artwork is not bundled and remains the property of its authors.
 
-- [ ] **Step 3: Build both modes and run the tests**
+- [x] **Step 3: Build and run the tests**
 
 ```bash
-cmake -S . -B build-default -DQT_VERSION_MAJOR=6 -DENABLE_TRANSLATIONS=OFF -DBUILD_TESTING=ON
-cmake --build build-default -j$(nproc)
-ctest --test-dir build-default -R qdiskinfo_theme_tests --output-on-failure
-
-cmake -S . -B build-legacy -DQT_VERSION_MAJOR=6 -DENABLE_TRANSLATIONS=OFF \
-  -DINCLUDE_OPTIONAL_RESOURCES=ON -DCHARACTER_IS_RIGHT=ON
-cmake --build build-legacy -j$(nproc)
+cmake -S . -B build -DQT_VERSION_MAJOR=6 -DENABLE_TRANSLATIONS=OFF -DBUILD_TESTING=ON
+cmake --build build -j$(nproc)
+ctest --test-dir build --output-on-failure
 ```
 
-Expected: both builds succeed; all theme tests pass.
+Expected: the build succeeds; all test suites pass. The legacy build no longer exists.
 
-- [ ] **Step 4: Run the manual verification matrix**
+- [x] **Step 4: Run the manual verification matrix**
 
 With the supplied `CrystalDiskInfo9_9_3Aoi.zip`:
 
 1. Import the ZIP from the app; verify all themes appear and Aoi is applied.
-2. Switch Aoi, AoiNight, AoiDark, AoiLight; verify background, glass, text and drive illustration.
+2. Switch Aoi, AoiNight, AoiDark, AoiLight; verify background, glass, text, correct character side and no disk artwork.
 3. Switch Default; compare against a clean upstream build screenshot.
 4. Resize the window; verify the background covers without distortion and the character stays anchored.
 5. Restart; verify the theme persists.
 6. Test overwrite and skip on a second import.
 7. Verify smartctl scanning, JSON export, self-test menus and grid view still work.
-8. In the legacy build, verify the compiled background/status images still work and Default restores the plain UI.
+8. Without a desktop icon theme, verify the navigation arrows and the serial reveal eye are visible and switch themes back and forth.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add include/mainwindow.h src/mainwindow.cpp README.md tests/theme_tests.cpp
-git commit -m "feat(theme): keep legacy themes and document runtime import"
+git add include/mainwindow.h src/mainwindow.cpp README.md
+git commit -m "feat(theme): document runtime theme import and verify"
 ```
+
+---
+
+### Task 9: Post-review hardening
+
+**Status:** Delivered after the manual visual review of the Aoi theme.
+
+**Files:**
+- Create: `dist/icons/{go-previous,go-next,visibility,hint}.svg`,
+  `include/iconfallback.h`, `src/iconfallback.cpp`, `tests/icon_tests.cpp`.
+- Modify: `src/resources.qrc`, `src/mainwindow.cpp`, `include/mainwindow.h`,
+  `CMakeLists.txt`, `README.md`, `.github/workflows/build.yaml`.
+- Delete: `dist/theme/` and the compile-time build flags.
+
+- [x] **Step 1: Stop drawing CDI disk art.** Runtime themes never draw the
+  `disk*` strips; the left status slot stays hidden. The status label and its
+  health illustration were later deleted with the compile-time mode.
+- [x] **Step 2: Bundle icon fallbacks.** Resolve `go-previous`, `go-next`,
+  `visibility` and `hint` through the desktop theme first; when it cannot
+  render a name, use a bundled SVG tinted to the runtime theme's `LabelText` or
+  the palette's `ButtonText`. The icon box is kept, so the styled navigation
+  buttons no longer collapse.
+- [x] **Step 3: Drop the compile-time theme mode.** Remove
+  `INCLUDE_OPTIONAL_RESOURCES`, `CHARACTER_IS_RIGHT`, the `Built-in
+  (compile-time)` menu entry, `applyBuiltinTheme()`, the built-in flag, the
+  status label and `dist/theme/`. A stale `__builtin__` selection falls back to
+  Default and is cleared.
+- [x] **Step 4: Add icon regression tests.** `qdiskinfo_icon_tests` builds the
+  real `MainWindow` with no desktop icon theme (fake `smartctl`/`pkexec`, test
+  mode settings) and checks bundled icons load, tinting, desktop-theme
+  priority, non-empty nav button icons and their size, runtime-theme tinting,
+  and the serial reveal toggle.
+- [x] **Step 5: Run the suites in CI on every push.** Add a `tests` job to the
+  build workflow (offscreen CTest), gate the packaging matrix on it, and let
+  pushes to any branch run the tests.
+- [x] **Step 6: Cache CI dependencies.** Cache `/var/cache/pacman/pkg` and
+  compile through ccache (`CCACHE_MAXSIZE=500M`) with keys that survive across
+  pushes.
 
 ---
 
 ## Self-Review Notes
 
-- Every spec section maps to a task: parsing (1), inheritance/assets (2), discovery (3), ZIP safety (4), import (5), menu/colours/background (6), layout/illustration (7), legacy/Clear Settings/docs (8).
+- Every spec section maps to a task: parsing (1), inheritance/assets (2), discovery (3), ZIP safety (4), import (5), menu/colours/background (6), layout (7), Clear Settings/docs (8), post-review hardening (9).
 - The plan intentionally leaves the theme menu/dialog native and drops the cross-fade, matching the spec's non-goals.
-- Runtime theme maximum size is not capped; only the legacy built-in theme keeps the old 960×960 cap.
-- The test target stays optional and is not installed. It links only Core/Gui/Test and the vendored miniz.
-- All `[Theme] Name` sentinels are defined once in the Global Constraints and used consistently.
+- Runtime theme maximum size is not capped; switching to Default restores the upstream size rules.
+- The test targets stay optional and are not installed. `qdiskinfo_theme_tests` links Core/Gui/Test and miniz; `qdiskinfo_icon_tests` builds the app sources and links Widgets/Test.
+- `[Theme] Name` is `__none__` or a runtime theme directory name; `__builtin__` is only a legacy value that startup clears.

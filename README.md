@@ -1,5 +1,5 @@
 # QDiskInfo
-QDiskInfo is a frontend for smartctl (part of the smartmontools package). It provides a user experience similar to CrystalDiskInfo. It shows the SMART (Self-Monitoring, Analysis, and Reporting Technology) data of modern hard disk drives.
+QDiskInfo is a frontend for smartctl (part of the smartmontools package). It provides a user experience similar to CrystalDiskInfo. It shows the SMART (Self-Monitoring, Analysis, and Reporting Technology) data of modern hard disk drives. CrystalDiskInfo anime theme packs can be imported and switched at runtime, without rebuilding.
 ![mockup](https://github.com/edisionnano/QDiskInfo/assets/26039434/e5488f41-6ea2-4304-9ae8-13d5dac7715b)
 The icon is a modified version of the KDE Partition Manager logo which is available under GPL-3.0+.
 
@@ -51,6 +51,13 @@ sudo xargs rm < install_manifest.txt
 ```
 in your build directory. The `install_manifest.txt` file is generated after running `sudo make install` so if you no longer have it, you can install again and then uninstall.
 
+### Running the Tests
+Add `-DBUILD_TESTING=ON` to the CMake command above and build, then from the `build` directory run
+```sh
+ctest --output-on-failure
+```
+The icon fallback tests start the real window on Qt's offscreen platform (CTest sets `QT_QPA_PLATFORM=offscreen` for them) with a fake smartctl, so no display or devices are needed. Both test suites also run in CI on every push.
+
 ## Localisation
 Currently, QDiskInfo has support for the following languages:
 - 🌐 English (C)
@@ -81,5 +88,7 @@ You can use the CrystalDiskInfo editions as runtime themes, without rebuilding Q
 1. Download the edition of CrystalDiskInfo you want (Aoi for example) in ZIP format from [here](https://crystalmark.info/en/download/).<br>
 2. In QDiskInfo open `Settings > Theme > Import Themes from CDI ZIP...` and select the ZIP. Every theme in the archive is installed under `~/.local/share/qdiskinfo/themes` (`Open Themes Folder` from the same menu takes you there).<br>
 3. Switch between the installed themes and `Default (No Theme)` at any time from the Theme menu; the selection is remembered across restarts.
+
+Runtime themes are the only theming path; there is no compile-time theme build to configure.
 
 QDiskInfo does not bundle or redistribute any theme artwork; the artwork remains the property of its authors.
