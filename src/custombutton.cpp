@@ -47,27 +47,3 @@ void CustomButton::resizeEvent(QResizeEvent *event) {
     QPushButton::resizeEvent(event);
     adjustWidthToFitText();
 }
-
-void CustomButton::setText1(const QString &newText1) {
-    if (text1 != newText1) {
-        text1 = newText1;
-        adjustWidthToFitText();
-        update();
-    }
-}
-
-void CustomButton::setText2(const QString &newText2) {
-    if (text2 != newText2) {
-        text2 = newText2;
-        adjustWidthToFitText();
-        update();
-    }
-}
-
-void CustomButton::setText3(const QString &newText3) {
-    if (text3 != newText3) {
-        text3 = newText3;
-        adjustWidthToFitText();
-        update();
-    }
-}

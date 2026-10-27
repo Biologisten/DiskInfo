@@ -36,7 +36,6 @@ public:
     QColor backgroundColor() const;
 
     void resolve(const QHash<QString, Theme> &available);
-    bool isResolved() const;
     QStringList searchDirectories() const;
     QString assetPath(const QString &baseName, int zoomPercent) const;
     QString backgroundPath(int zoomPercent) const;
@@ -55,7 +54,6 @@ private:
     ThemeColors m_colors;
     QColor m_backgroundColor;
     QHash<QString, QString> m_raw;
-    bool m_resolved = false;
     QStringList m_searchDirectories;
 };
 

@@ -281,12 +281,6 @@ void Theme::resolve(const QHash<QString, Theme> &available)
     for (const Theme *theme : chain) {
         m_searchDirectories.append(theme->m_directory);
     }
-    m_resolved = true;
-}
-
-bool Theme::isResolved() const
-{
-    return m_resolved;
 }
 
 QStringList Theme::searchDirectories() const
