@@ -99,7 +99,7 @@ private:
     void addSCSIErrorCounterLogTable(const QJsonObject &scsiErrorCounterLog);
     void addNvmeLogTable(const QVector<QPair<QString, int>>& nvmeLogOrdered);
     void addSmartAttributesTable(const QJsonArray &attributes);
-    void mousePressEvent(QMouseEvent*);
+    void mousePressEvent(QMouseEvent *event) override;
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
