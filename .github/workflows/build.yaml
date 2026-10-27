@@ -2,15 +2,41 @@ name: Build
 
 on:
   push:
-    branches:
-      - main
     paths-ignore:
       - "**.md"
   pull_request:
   workflow_dispatch:
 
 jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/pkgforge-dev/archlinux:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm \
+            base-devel    \
+            cmake         \
+            libxkbcommon  \
+            mesa          \
+            qt6-base      \
+            qt6-svg
+
+      - name: Build tests
+        run: |
+          cmake -Bbuild -DCMAKE_BUILD_TYPE:STRING=MinSizeRel -DQT_VERSION_MAJOR=6 -DENABLE_TRANSLATIONS=OFF -DBUILD_TESTING=ON
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Run icon regression tests
+        run: ctest --test-dir build --output-on-failure --no-tests=error
+
   build:
+    needs: tests
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     permissions:
       actions: read
       security-events: write
