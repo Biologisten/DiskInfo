@@ -1,9 +1,10 @@
 #pragma once
 
 #include <QColor>
+#include <QHash>
 #include <QString>
 #include <QStringList>
-#include <QHash>
+#include <QVector>
 
 struct ThemeColors {
     QColor labelText = QColor(Qt::black);
@@ -12,8 +13,8 @@ struct ThemeColors {
     QColor listText2 = QColor(Qt::black);
     QColor listBg1 = QColor(Qt::white);
     QColor listBg2 = QColor(0xF8, 0xF8, 0xF8);
-    QColor listLine1 = QColor(0xE0, 0xE0, 0xE0);
-    QColor listLine2 = QColor(0xE8, 0xE8, 0xE8);
+    QColor listLine1 = QColor(Qt::black);
+    QColor listLine2 = QColor(Qt::black);
     QColor glass = QColor(Qt::white);
     int glassAlpha = 128;
 };
@@ -22,7 +23,10 @@ class Theme
 {
 public:
     Theme();
+
     static Theme parse(const QString &directory);
+    static QColor parseColor(const QString &value, bool *ok = nullptr);
+
     bool isValid() const;
     QString name() const;
     QString directory() const;
@@ -30,7 +34,6 @@ public:
     int characterPosition() const;
     const ThemeColors &colors() const;
     QColor backgroundColor() const;
-    QString debugRaw(const QString &key) const { return m_raw.value(key); }
 
     void resolve(const QHash<QString, Theme> &available);
     bool isResolved() const;
@@ -40,6 +43,11 @@ public:
     bool hasOwnBackground() const;
 
 private:
+    void applyValues(const QVector<const Theme *> &chain);
+    void collectChain(const QHash<QString, Theme> &available,
+                      QVector<const Theme *> &chain,
+                      QStringList &visited) const;
+
     bool m_valid = false;
     QString m_directory;
     QStringList m_parents;
@@ -50,3 +58,5 @@ private:
     bool m_resolved = false;
     QStringList m_searchDirectories;
 };
+
+QString buildThemeStyleSheet(const ThemeColors &colors);

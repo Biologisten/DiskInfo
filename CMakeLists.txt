@@ -114,7 +114,8 @@ if(BUILD_TESTING)
         tests/theme_tests.cpp
         src/theme.cpp
         src/thememanager.cpp
-        src/thememanager_import.cpp
+        src/ziparchive.cpp
+        third_party/miniz/miniz.c
     )
     target_include_directories(qdiskinfo_theme_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/include
