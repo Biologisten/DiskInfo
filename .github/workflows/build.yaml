@@ -48,10 +48,51 @@ jobs:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           CCACHE_MAXSIZE: 500M
         run: |
+          # Dead code and missing override markers fail the build. GCC cannot
+          # detect unused private fields or member functions; the static-checks
+          # job covers those with clang.
           cmake -Bbuild -DCMAKE_BUILD_TYPE:STRING=MinSizeRel -DQT_VERSION_MAJOR=6 -DENABLE_TRANSLATIONS=OFF -DBUILD_TESTING=ON \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_FLAGS="-Werror=unused-function -Werror=unused-variable -Werror=unused-const-variable -Werror=unused-but-set-variable -Werror=unused-local-typedefs -Wsuggest-override -Werror=suggest-override"
           cmake --build build --parallel "$(nproc)"
           ccache --show-stats
 
       - name: Run icon regression tests
         run: ctest --test-dir build --output-on-failure --no-tests=error
+
+  static-checks:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/pkgforge-dev/archlinux:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache pacman packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-clang-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yaml') }}
+          restore-keys: |
+            pacman-clang-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm \
+            base-devel    \
+            clang         \
+            cmake         \
+            libxkbcommon  \
+            mesa          \
+            qt6-base      \
+            qt6-svg
+
+      - name: Fail on dead code and missing override markers
+        run: |
+          # Clang sees unused private fields and member functions, which GCC
+          # has no warning for. -Wno-unknown-warning-option covers the
+          # GCC-only flags the project hard-codes in CMakeLists.txt.
+          cmake -Bbuild-clang -DCMAKE_BUILD_TYPE:STRING=MinSizeRel -DQT_VERSION_MAJOR=6 -DENABLE_TRANSLATIONS=OFF \
+            -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_FLAGS="-Wno-unknown-warning-option -Werror=unused-function -Werror=unused-variable -Werror=unused-const-variable -Werror=unused-but-set-variable -Werror=unused-lambda-capture -Werror=unused-private-field -Werror=unused-member-function -Werror=inconsistent-missing-override"
+          cmake --build build-clang --parallel "$(nproc)"

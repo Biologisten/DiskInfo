@@ -31,6 +31,10 @@ history lives in its own repository. The fork starts from upstream QDiskInfo
   desktop icon priority and the themed `MainWindow` on Qt's offscreen platform.
 - A GitHub Actions test job that builds and runs the suites on pushes and pull
   requests, with caches for pacman packages and compiler output.
+- Dead-code and override gates in CI: the test job treats GCC's unused-code and
+  `-Wsuggest-override` warnings as errors, and a `static-checks` job builds
+  with clang to also catch unused private fields and member functions, which
+  GCC has no warning for.
 
 ### Changed
 

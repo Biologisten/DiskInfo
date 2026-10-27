@@ -79,7 +79,7 @@ Add `-DBUILD_TESTING=ON` to the CMake command above and build, then from the `bu
 ```sh
 ctest --output-on-failure
 ```
-The icon fallback tests start the real window on Qt's offscreen platform (CTest sets `QT_QPA_PLATFORM=offscreen` for them) with a fake smartctl, so no display or devices are needed. Both suites also run in CI on every push.
+The icon fallback tests start the real window on Qt's offscreen platform (CTest sets `QT_QPA_PLATFORM=offscreen` for them) with a fake smartctl, so no display or devices are needed. Both suites also run in CI on every push, which additionally fails the build on newly introduced dead code and on virtual overrides that lack the `override` marker.
 
 ## Using CrystalDiskInfo Anime Themes
 You can use the CrystalDiskInfo editions as runtime themes, without rebuilding QDiskInfo:<br>
