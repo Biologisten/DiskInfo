@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(QDiskInfo VERSION 0.4 LANGUAGES CXX)
+project(QDiskInfo VERSION 0.4 LANGUAGES C CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -31,10 +31,7 @@ file(GLOB_RECURSE PROJECT_SOURCES
     src/*.ui
     src/resources.qrc
 )
-
-if(INCLUDE_OPTIONAL_RESOURCES)
-    set(PROJECT_SOURCES ${PROJECT_SOURCES} dist/theme/theme_resources.qrc)
-endif()
+set(PROJECT_SOURCES ${PROJECT_SOURCES} third_party/miniz/miniz.c)
 
 if(ENABLE_TRANSLATIONS)
     file(GLOB TS_FILES "${CMAKE_SOURCE_DIR}/translations/*.ts")
@@ -66,14 +63,15 @@ if(CALL_LUPDATE)
     add_dependencies(${PROJECT_NAME} update_translations)
 endif()
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/third_party/miniz
+)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     PROJECT_VERSION_MAJOR=${${PROJECT_NAME}_VERSION_MAJOR}
     PROJECT_VERSION_MINOR=${${PROJECT_NAME}_VERSION_MINOR}
     ENABLE_TRANSLATIONS=$<BOOL:${ENABLE_TRANSLATIONS}>
-    INCLUDE_OPTIONAL_RESOURCES=$<BOOL:${INCLUDE_OPTIONAL_RESOURCES}>
-    CHARACTER_IS_RIGHT=$<BOOL:${CHARACTER_IS_RIGHT}>
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
@@ -100,5 +98,55 @@ install(FILES "dist/${PROJECT_NAME}.svg"
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
     qt_finalize_executable(${PROJECT_NAME})
 endif()
+
+option(BUILD_TESTING "Build QDiskInfo tests" OFF)
+include(CTest)
+
+if(BUILD_TESTING)
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Gui Widgets)
+    add_executable(qdiskinfo_theme_tests
+        tests/theme_tests.cpp
+        src/theme.cpp
+        src/thememanager.cpp
+        src/ziparchive.cpp
+        third_party/miniz/miniz.c
+    )
+    target_include_directories(qdiskinfo_theme_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/third_party/miniz
+    )
+    target_link_libraries(qdiskinfo_theme_tests PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        Qt${QT_VERSION_MAJOR}::Gui
+        Qt${QT_VERSION_MAJOR}::Test
+    )
+    add_test(NAME qdiskinfo_theme_tests COMMAND qdiskinfo_theme_tests)
+
+    set(TEST_APP_SOURCES ${PROJECT_SOURCES})
+    list(FILTER TEST_APP_SOURCES EXCLUDE REGEX "(^|/)main\\.cpp$")
+    list(FILTER TEST_APP_SOURCES EXCLUDE REGEX "translations\\.qrc$")
+    add_executable(qdiskinfo_icon_tests
+        tests/icon_tests.cpp
+        ${TEST_APP_SOURCES}
+    )
+    target_include_directories(qdiskinfo_icon_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/third_party/miniz
+    )
+    target_compile_definitions(qdiskinfo_icon_tests PRIVATE
+        PROJECT_VERSION_MAJOR=${${PROJECT_NAME}_VERSION_MAJOR}
+        PROJECT_VERSION_MINOR=${${PROJECT_NAME}_VERSION_MINOR}
+        ENABLE_TRANSLATIONS=$<BOOL:${ENABLE_TRANSLATIONS}>
+    )
+    target_link_libraries(qdiskinfo_icon_tests PRIVATE
+        Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Test
+    )
+    add_test(NAME qdiskinfo_icon_tests COMMAND qdiskinfo_icon_tests)
+    set_tests_properties(qdiskinfo_icon_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+endif()
+
 include(FeatureSummary)
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)

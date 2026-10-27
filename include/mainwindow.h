@@ -2,6 +2,8 @@
 
 #include "utils.h"
 #include "gridview.h"
+#include "theme.h"
+#include "thememanager.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -10,8 +12,10 @@
 #include <QMainWindow>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSettings>
 #include <QTableWidget>
+#include <QTimer>
 #include <QWidget>
 #include <QProcess>
 #include <cmath>
@@ -59,16 +63,17 @@ private:
     utils Utils;
     QButtonGroup *buttonGroup;
     QHBoxLayout *horizontalLayout;
+    QHBoxLayout *infoLayout;
     QVBoxLayout *verticalLayout;
     QGridLayout *gridLayout;
     QLabel *diskName, *temperatureValue, *healthStatusValue;
+    QLabel *temperatureLabelVertical, *healthStatusLabelVertical;
     QLabel *temperatureLabelHorizontal, *healthStatusLabelHorizontal, *temperatureValueHorizontal, *healthStatusValueHorizontal;
     QLineEdit *firmwareLineEdit, *serialNumberLineEdit, *typeLineEdit, *protocolLineEdit, *deviceNodeLineEdit;
     QLineEdit *totalReadsLineEdit, *totalWritesLineEdit, *rotationRateLineEdit, *powerOnCountLineEdit, *powerOnHoursLineEdit;
     QTableWidget *tableWidget;
     QPushButton *prevButton, *nextButton;
     QColor goodColor, cautionColor, badColor, naColor;
-    QLabel *statusLabel;
     QJsonObject deviceJson;
     QSpacerItem *buttonStretch;
     QAction *actionCyclic_Navigation;
@@ -76,6 +81,7 @@ private:
     QMenu *menuDisk;
     QMenu *selfTestMenu;
     QAction *selfTestLogAction;
+    QAction *serialEchoAction = nullptr;
     QActionGroup *disksGroup;
     QJsonArray devices;
     QStringList deviceOutputs;
@@ -93,8 +99,55 @@ private:
     void addSCSIErrorCounterLogTable(const QJsonObject &scsiErrorCounterLog);
     void addNvmeLogTable(const QVector<QPair<QString, int>>& nvmeLogOrdered);
     void addSmartAttributesTable(const QJsonArray &attributes);
-    void transformWindow();
     void mousePressEvent(QMouseEvent*);
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+
+private:
+    ThemeManager themeManager;
+    Theme currentTheme;
+    bool themedMode = false;
+    bool themeLayoutActive = false;
+    bool screenChangeConnected = false;
+    QString currentThemeName;
+
+    QTimer themeBackgroundTimer;
+    QPixmap themeBackgroundSource;
+    QPalette defaultCentralPalette;
+    QPalette defaultTablePalette;
+    bool defaultViewportAutoFillBackground = false;
+    bool defaultAlternatingRowColors = false;
+    int defaultMinimumWidth = 0;
+    QSize defaultMaximumSize;
+
+    QSpacerItem *infoSpacer = nullptr;
+    QSpacerItem *gridLeftSpacer = nullptr;
+    QVector<QPair<int, QSpacerItem *>> verticalSpacers;
+    QSpacerItem *characterSpacer = nullptr;
+
+    QMenu *themeMenu = nullptr;
+    QActionGroup *themeActionGroup = nullptr;
+
+    void setupThemeMenu();
+    void rebuildThemeMenu();
+    void setThemeSelection(const QString &name, bool persist);
+    void importThemesFromZip();
+    void openThemesFolder();
+
+    void applyThemeVisuals(const Theme &theme);
+    void clearThemeVisuals();
+    void applyThemeLayout(bool enabled, bool characterRight);
+    void updateThemeBackground();
+    int themeZoomPercent() const;
+    void applyThemeColors(const ThemeColors &colors);
+    void restoreDefaultColors();
+    void initializeDefaultThemeState();
+    void refreshCurrentDevice();
+    QString themeButtonTextColor() const;
+    QColor iconForegroundColor() const;
+    void updateIconFallbacks();
 
 private:
     QString mbSymbol;

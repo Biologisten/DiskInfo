@@ -2,15 +2,63 @@ name: Build
 
 on:
   push:
-    branches:
-      - main
     paths-ignore:
       - "**.md"
   pull_request:
   workflow_dispatch:
 
 jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/pkgforge-dev/archlinux:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache pacman packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yaml') }}
+          restore-keys: |
+            pacman-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm \
+            base-devel    \
+            ccache        \
+            cmake         \
+            libxkbcommon  \
+            mesa          \
+            qt6-base      \
+            qt6-svg
+
+      - name: Cache CMake compiler output
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'include/**', 'tests/**', 'third_party/**') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      - name: Build tests
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 500M
+        run: |
+          cmake -Bbuild -DCMAKE_BUILD_TYPE:STRING=MinSizeRel -DQT_VERSION_MAJOR=6 -DENABLE_TRANSLATIONS=OFF -DBUILD_TESTING=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --parallel "$(nproc)"
+          ccache --show-stats
+
+      - name: Run icon regression tests
+        run: ctest --test-dir build --output-on-failure --no-tests=error
+
   build:
+    needs: tests
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     permissions:
       actions: read
       security-events: write

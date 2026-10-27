@@ -5,5 +5,9 @@
         <file alias="Disk_Bad.svg">../dist/status/Disk_Bad.svg</file>
         <file alias="Disk_Caution.svg">../dist/status/Disk_Caution.svg</file>
         <file alias="Disk_Unknown.svg">../dist/status/Disk_Unknown.svg</file>
+        <file alias="go-previous.svg">../dist/icons/go-previous.svg</file>
+        <file alias="go-next.svg">../dist/icons/go-next.svg</file>
+        <file alias="visibility.svg">../dist/icons/visibility.svg</file>
+        <file alias="hint.svg">../dist/icons/hint.svg</file>
     </qresource>
 </RCC>
